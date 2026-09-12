@@ -29,9 +29,15 @@ describe.skipIf(!databaseUrl)('Repeatable demo seed (PostgreSQL)', () => {
       otherSales: 3,
       employees: 6,
       customers: 4,
+      notificationsAdded: 7,
     });
     expect(await ctx.prisma.sale.count()).toBe(33);
     expect(await ctx.prisma.reservation.count()).toBe(7);
+    expect(await ctx.prisma.notification.count()).toBe(7);
+    const notice = await ctx.prisma.notification.findFirstOrThrow();
+    const receipt = await ctx.prisma.notificationRead.create({
+      data: { notificationId: notice.id, userId: oldAdmin.id },
+    });
     expect(
       (
         await ctx.prisma.user.findUniqueOrThrow({
@@ -98,7 +104,9 @@ describe.skipIf(!databaseUrl)('Repeatable demo seed (PostgreSQL)', () => {
         ...options,
         demoPassword: 'AnotherDemoPassword123!',
       }),
-    ).toMatchObject({ created: false });
+    ).toMatchObject({ created: false, notificationsAdded: 0 });
+    expect(await ctx.prisma.notification.count()).toBe(7);
+    expect(await ctx.prisma.notificationRead.findMany()).toEqual([receipt]);
     await seedBase(ctx.prisma, options);
     expect({
       users: await ctx.prisma.user.count(),
@@ -125,6 +133,27 @@ describe.skipIf(!databaseUrl)('Repeatable demo seed (PostgreSQL)', () => {
       include: { roles: { include: { role: true } } },
     });
     expect(user.roles.map(({ role }) => role.name)).toEqual(['CUSTOMER']);
+  });
+
+  it('adds missing notices to an older demo without replaying stock or sales', async () => {
+    const stock = await ctx.prisma.inventory.findMany({
+      orderBy: { id: 'asc' },
+    });
+    const sales = await ctx.prisma.sale.count();
+    const notice = await ctx.prisma.notification.findFirstOrThrow({
+      where: { reads: { none: {} } },
+    });
+    await ctx.prisma.notification.delete({ where: { id: notice.id } });
+    expect(await seedDemo(ctx.prisma, options)).toMatchObject({
+      created: false,
+      notificationsAdded: 1,
+    });
+    expect(await ctx.prisma.notification.count()).toBe(7);
+    expect(await ctx.prisma.notificationRead.count()).toBe(1);
+    expect(await ctx.prisma.sale.count()).toBe(sales);
+    expect(
+      await ctx.prisma.inventory.findMany({ orderBy: { id: 'asc' } }),
+    ).toEqual(stock);
   });
 
   it('rejects invalid demo inputs before creating records', async () => {

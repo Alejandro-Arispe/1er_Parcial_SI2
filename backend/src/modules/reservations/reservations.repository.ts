@@ -5,6 +5,7 @@ import { Prisma, ReservationStatus } from '../../generated/prisma/client.js';
 import { ReservationItemDto } from './dto/reservation-item.dto.js';
 import { ListReservationsQueryDto } from './dto/list-reservations-query.dto.js';
 import { expirableStatuses } from './reservation-policy.js';
+import { createReservationNotification } from '../notifications/reservation-notification.js';
 
 const reservationInclude = {
   branch: { select: { id: true, name: true, city: true, address: true } },
@@ -114,7 +115,7 @@ export class ReservationsRepository {
     };
   }
 
-  create(
+  async create(
     data: {
       clientId: number;
       branchId: number;
@@ -125,10 +126,12 @@ export class ReservationsRepository {
     },
     tx: Prisma.TransactionClient,
   ) {
-    return tx.reservation.create({
+    const reservation = await tx.reservation.create({
       data: { ...data, items: { create: data.items } },
       include: reservationInclude,
     });
+    await createReservationNotification(tx, reservation);
+    return reservation;
   }
 
   async requireAvailableStock(

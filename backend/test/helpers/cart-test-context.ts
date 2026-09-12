@@ -169,6 +169,7 @@ export async function cartTestContext(
       tokens.push(response.body.data.accessToken as string);
     }
     return {
+      schema,
       app,
       prisma,
       branch,

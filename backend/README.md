@@ -56,6 +56,14 @@ Ventas por moneda/sucursal/canal/día, productos más vendidos, stock actual y
 reservas por estado. Acceso para administradores y encargados de su sucursal.
 Ver [guía de Reportes](docs/reportes.md) y [OpenAPI](docs/reports.openapi.json).
 
+## Notificaciones de reservas
+
+Avisos persistentes al crear una reserva, lista paginada, contador y lectura
+individual para administradores y encargados de la sucursal. La campana web puede
+consultar la API periódicamente. Incluye migración y siete avisos en el seed DEMO.
+Ver [guía de Notificaciones](docs/notificaciones.md) y
+[OpenAPI](docs/notifications.openapi.json).
+
 ## Comandos de base de datos
 
 ```bash

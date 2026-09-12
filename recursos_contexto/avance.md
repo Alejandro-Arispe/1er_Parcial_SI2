@@ -147,7 +147,16 @@ Los dashboards avanzados, notificaciones en tiempo real y automatizaciones sofis
 - Conexiones Prisma y seeds fijadas en UTC para evitar el desfase del adaptador
   con servidores PostgreSQL configurados en otra zona; los reportes agrupan en
   Bolivia. No se modificaron fechas históricas existentes.
-- Verificación: 113 pruebas unitarias y 61 E2E correctas (incluidos escenarios con
+- **Notificaciones de reservas implementado (RF11):** aviso persistente por reserva,
+  creado en la misma transacción que la reserva y el stock. Lista paginada,
+  contador de pendientes y marcado como leído individual por usuario.
+- Administrador con alcance global y encargado activo limitado a su sucursal,
+  con asignación verificada en cada consulta. Los cambios de estado conservan
+  el aviso y muestran el estado actual de la reserva.
+- Agregados dos modelos técnicos, migración con recuperación de avisos para
+  reservas abiertas anteriores, guía y contrato OpenAPI. El seed DEMO genera
+  siete avisos; repetirlo añade solo los faltantes y conserva las lecturas.
+- Verificación: 122 pruebas unitarias y 73 E2E correctas (incluidos escenarios con
   PostgreSQL real y concurrencia), compilación, chequeo TypeScript y lint correctos.
   Migraciones y seed probados en una instancia temporal aislada; repetir el seed
   de ventas no duplica la venta ni vuelve a consumir inventario.
@@ -157,7 +166,7 @@ Los dashboards avanzados, notificaciones en tiempo real y automatizaciones sofis
 - Aplicar `npm run prisma:migrate:deploy` a la base de desarrollo antes de iniciar
   esta versión. La base de desarrollo se llama `tienda_ropa`; su configuración
   existente se conservó y no se aplicaron migraciones ni seeds a esa base.
-- **Siguientes módulos pendientes: notificaciones, IA y recursos de RA/vestidor virtual.**
+- **Siguientes módulos pendientes: IA y recursos de RA/vestidor virtual.**
   También quedan notificaciones push y devoluciones comerciales de ventas
   completadas (reembolsos parciales, disputas y ajustes de inventario asociados).
 
@@ -165,5 +174,28 @@ Documentación de uso: [Reservas](../backend/docs/reservas.md),
 [Carrito](../backend/docs/carrito.md),
 [Ventas y checkout](../backend/docs/ventas-checkout.md) y
 [Pagos/Stripe](../backend/docs/pagos-stripe.md),
-[Reportes](../backend/docs/reportes.md) e
+[Reportes](../backend/docs/reportes.md),
+[Notificaciones](../backend/docs/notificaciones.md) e
 [Instalación y seed](../backend/docs/instalacion-y-seed.md).
+
+## Punto de continuación acordado
+
+- Último trabajo terminado: **Notificaciones internas de reservas (RF11)**,
+  después de Reportes y seed completo. Incluye pruebas, migración, datos DEMO
+  y guía para integrar la campana en la web.
+- Rutas disponibles: `GET /api/v1/notifications`,
+  `GET /api/v1/notifications/unread-count` y
+  `PATCH /api/v1/notifications/:id/read`.
+- Canal de esta entrega: consultas REST desde la web, por ejemplo cada 30 segundos.
+  La campana/lista visual todavía debe implementarse en el frontend; no hay
+  WebSocket ni SSE. Consultar avisos no los marca leídos automáticamente.
+- Aplicar `npm run prisma:generate` y `npm run prisma:migrate:deploy` desde
+  `backend` antes de iniciar esta versión. Hay seis migraciones. El seed DEMO
+  puede repetirse para añadir avisos que falten, sin reiniciar los datos anteriores.
+- La configuración de `tienda_ropa` se conservó. Las verificaciones de esta
+  implementación usaron una instancia temporal de PostgreSQL; no poblaron esa base.
+- Las notificaciones push fuera de la aplicación, correos y avisos al cliente
+  sobre cambios de estado son alcances adicionales por definir, no funcionalidades
+  ya implementadas.
+- Después siguen IA y recursos de RA/vestidor virtual. También están pendientes
+  el despliegue en Azure y el flujo de devoluciones comerciales de ventas completadas.

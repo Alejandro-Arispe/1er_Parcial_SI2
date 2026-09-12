@@ -142,5 +142,7 @@ carga datos aislados y elimina únicamente ese esquema al terminar. Sin
 completo, permisos, validaciones, reserva simultánea de la última unidad,
 cancelaciones concurrentes, dos procesos de vencimiento y protección del cliente presente.
 
-La conversión en venta presencial ya está disponible en Ventas. Siguen pendientes
-el cobro por pasarela, notificaciones y las pantallas web/móvil.
+La conversión en venta presencial está disponible en Ventas y el cobro electrónico
+en Pagos/Stripe. Los avisos internos de creación están implementados en
+[Notificaciones](./notificaciones.md). Quedan pendientes las pantallas web/móvil
+y los canales push o en tiempo real.

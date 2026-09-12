@@ -86,8 +86,8 @@ durante la instalación; el comando explícito permite repetirla si fuera necesa
 aplicadas. Para recibir el proyecto de otra persona no hace falta crear una
 migración nueva ni ejecutar `migrate reset` o `db push`.
 
-El esquema actual contiene cinco migraciones; Reportes consulta las tablas
-existentes y no añade otra migración.
+El esquema actual contiene seis migraciones, incluida la de notificaciones de
+reservas. Reportes consulta las tablas existentes y no añade otra migración.
 
 ## 5. Elegir qué datos cargar
 
@@ -124,6 +124,7 @@ Sobre una base vacía deja:
 | Ventas | 30 completadas: 18 presenciales, 6 WEB y 6 MOBILE |
 | Otros pedidos | 1 pendiente, 1 cancelado y 1 cancelado con pago reembolsado |
 | Reservas | 7, una por cada estado |
+| Notificaciones | 7 avisos de reserva, con lectura individual por usuario |
 | Carritos | 4 activos y 15 convertidos conservados como historial |
 | Entradas pendientes | 3, una por sucursal DEMO |
 
@@ -185,6 +186,8 @@ GET /api/v1/reports/sales
 GET /api/v1/reports/top-products
 GET /api/v1/reports/inventory?lowStockOnly=true
 GET /api/v1/reports/reservations
+GET /api/v1/notifications
+GET /api/v1/notifications/unread-count
 ```
 
 Los encargados solo ven su sucursal. Clientes y cajeros no acceden a Reportes.
@@ -202,6 +205,11 @@ reservas, usuarios ni movimientos. Tampoco repone stock consumido, reabre carrit
 o cambia contraseñas. La fecha original de los registros se conserva aunque cambie
 `SEED_DEMO_DATE`; el `referenceDate` impreso en una repetición es el solicitado para
 esa ejecución, no una modificación del historial.
+
+La actualización del módulo Notificaciones añade los avisos que falten para las
+reservas DEMO existentes, sin duplicar avisos ni reiniciar lecturas. El resultado
+incluye `notificationsAdded`, también cuando `created` es `false`. No reconstruye
+otras partes borradas del conjunto. Ver [Notificaciones](./notificaciones.md).
 
 No es un comando de reparación ni de reinicio. Si se borraron partes de los datos
 DEMO manualmente, revisar la base o usar otra base de demostración vacía. Si existen

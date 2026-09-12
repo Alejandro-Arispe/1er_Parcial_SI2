@@ -105,6 +105,7 @@ model User {
   employee     Employee?
   roles        UserRole[]
   createdSales Sale[] @relation("SaleCreator")
+  notificationReads NotificationRead[]
 
   @@map("usuarios")
 }
@@ -170,6 +171,7 @@ model Branch {
   inventory    Inventory[]
   reservations Reservation[]
   sales        Sale[]
+  notifications Notification[]
 
   @@unique([city, name])
   @@index([city, active])
@@ -362,6 +364,7 @@ model Reservation {
   branch          Branch            @relation(fields: [branchId], references: [id], onDelete: Restrict)
   items           ReservationItem[]
   sale            Sale?
+  notification    Notification?
 
   @@index([clientId, status])
   @@index([branchId, approximateTime, status])
@@ -532,4 +535,33 @@ model AiRecommendation {
   @@index([clientId, createdAt])
   @@index([productId])
   @@map("recomendaciones_ia")
+}
+
+// One branch-wide event per reservation; read state belongs to each staff user.
+model Notification {
+  id              Int       @id @default(autoincrement()) @map("id_notificacion")
+  branchId        Int       @map("id_sucursal")
+  reservationId   Int       @unique @map("id_reserva")
+  unitCount       Int       @map("cantidad_prendas")
+  approximateTime DateTime  @map("horario_aproximado") @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @map("fecha_creacion") @db.Timestamptz(3)
+  branch          Branch    @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  reservation     Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  reads           NotificationRead[]
+
+  @@index([branchId, createdAt, id])
+  @@index([createdAt, id])
+  @@map("notificaciones")
+}
+
+model NotificationRead {
+  notificationId Int          @map("id_notificacion")
+  userId         Int          @map("id_usuario")
+  readAt         DateTime     @default(now()) @map("fecha_lectura") @db.Timestamptz(3)
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([notificationId, userId])
+  @@index([userId, notificationId])
+  @@map("lecturas_notificacion")
 }

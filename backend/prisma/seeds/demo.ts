@@ -7,6 +7,18 @@ import {
   SaleChannel,
 } from '../../src/generated/prisma/client.js';
 import { seedBase, SeedOptions, validateSeedPassword } from './base.js';
+import { createReservationNotification } from '../../src/modules/notifications/reservation-notification.js';
+
+async function ensureDemoNotifications(prisma: Prisma.TransactionClient) {
+  const reservations = await prisma.reservation.findMany({
+    where: { observation: { startsWith: 'DEMO:V1:RESERVATION:' } },
+    include: { items: true },
+  });
+  let added = 0;
+  for (const reservation of reservations)
+    added += (await createReservationNotification(prisma, reservation)).count;
+  return added;
+}
 
 export interface DemoSeedOptions extends SeedOptions {
   demoPassword: string;
@@ -45,7 +57,11 @@ export async function seedDemo(client: PrismaClient, options: DemoSeedOptions) {
           },
         })
       )
-        return { created: false, referenceDate: date };
+        return {
+          created: false,
+          referenceDate: date,
+          notificationsAdded: await ensureDemoNotifications(prisma),
+        };
       if (
         await prisma.branch.count({
           where: { name: { startsWith: 'DEMO - ' } },
@@ -479,6 +495,7 @@ export async function seedDemo(client: PrismaClient, options: DemoSeedOptions) {
         completedSales: 30,
         otherSales: 3,
         reservations: 7,
+        notificationsAdded: await ensureDemoNotifications(prisma),
         employees: 6,
         customers: 4,
       };
