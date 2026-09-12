@@ -1,0 +1,58 @@
+{
+  "expo": {
+    "name": "FashionStore",
+    "slug": "fashionstore-movil",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#faf7f3",
+    "scheme": "fashionstore",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "bo.fashionstore.movil",
+      "infoPlist": {
+        "NSCameraUsageDescription": "FashionStore usa la camara para el probador virtual de prendas.",
+        "NSPhotoLibraryAddUsageDescription": "Permite guardar en tu galeria las fotos del probador virtual."
+      }
+    },
+    "android": {
+      "package": "bo.fashionstore.movil",
+      "adaptiveIcon": {
+        "backgroundColor": "#faf7f3",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#faf7f3"
+        }
+      ],
+      "expo-image",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "FashionStore usa la camara para el probador virtual de prendas."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "savePhotosPermission": "Permite guardar en tu galeria las fotos del probador virtual.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ],
+      "expo-font"
+    ]
+  }
+}
