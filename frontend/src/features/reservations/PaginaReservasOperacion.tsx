@@ -1,0 +1,187 @@
+import { useState } from 'react';
+import { BadgeReserva } from '../../components/ui/Badges';
+import { ErrorEstado, FilasSkeleton, Vacio } from '../../components/ui/Estados';
+import { Confirmacion } from '../../components/ui/Modal';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import { useCambiarEstadoReserva, useReservas } from '../../hooks/useComercio';
+import { useSucursales } from '../../hooks/useOperaciones';
+import { etiqueta, fechaHora } from '../../lib/format';
+import { EstadoReserva } from '../../types/domain';
+
+/** Mismas transiciones que valida el backend; aqui solo guian la operacion. */
+const SIGUIENTES: Record<string, EstadoReserva[]> = {
+  [EstadoReserva.PENDIENTE]: [EstadoReserva.PREPARANDO, EstadoReserva.CANCELADA],
+  [EstadoReserva.PREPARANDO]: [EstadoReserva.LISTA, EstadoReserva.CANCELADA],
+  [EstadoReserva.LISTA]: [EstadoReserva.CLIENTE_PRESENTE, EstadoReserva.VENCIDA],
+  [EstadoReserva.CLIENTE_PRESENTE]: [EstadoReserva.ATENDIDA, EstadoReserva.CANCELADA],
+  [EstadoReserva.ATENDIDA]: [],
+  [EstadoReserva.CANCELADA]: [],
+  [EstadoReserva.VENCIDA]: [],
+};
+
+const ACCION: Record<string, string> = {
+  [EstadoReserva.PREPARANDO]: 'Comenzar preparacion',
+  [EstadoReserva.LISTA]: 'Marcar como lista',
+  [EstadoReserva.CLIENTE_PRESENTE]: 'Cliente en tienda',
+  [EstadoReserva.ATENDIDA]: 'Registrar atencion',
+  [EstadoReserva.CANCELADA]: 'Cancelar',
+  [EstadoReserva.VENCIDA]: 'Marcar vencida',
+};
+
+export default function PaginaReservasOperacion() {
+  const { idSucursal, tieneRol } = useAuth();
+  const esAdmin = tieneRol('ADMINISTRADOR');
+
+  const [estado, setEstado] = useState('');
+  const [sucursalFiltro, setSucursalFiltro] = useState<number | ''>(esAdmin ? '' : (idSucursal ?? ''));
+  const [confirmacion, setConfirmacion] = useState<{ id: number; estado: EstadoReserva } | null>(null);
+
+  const sucursales = useSucursales();
+  const cambiar = useCambiarEstadoReserva();
+  const toast = useToast();
+
+  const consulta = useReservas({
+    estado: (estado || undefined) as EstadoReserva | undefined,
+    id_sucursal: sucursalFiltro || undefined,
+    page_size: 30,
+  });
+
+  async function aplicar() {
+    if (!confirmacion) return;
+    try {
+      await cambiar.mutateAsync(confirmacion);
+      toast.exito('Estado de la reserva actualizado.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No pudimos actualizar la reserva.');
+    } finally {
+      setConfirmacion(null);
+    }
+  }
+
+  return (
+    <>
+      <header className="fs-pagina-cabecera">
+        <div>
+          <p className="fs-eyebrow">Operaciones</p>
+          <h1>Reservas</h1>
+          <p className="fs-sub">Preparacion y atencion de las prendas apartadas por los clientes.</p>
+        </div>
+      </header>
+
+      <section className="fs-tarjeta fs-tarjeta--pad">
+        <div className="fs-fila-wrap">
+          <div className="fs-campo" style={{ minWidth: 220 }}>
+            <label htmlFor="estado-reserva">Estado</label>
+            <select id="estado-reserva" className="fs-select" value={estado} onChange={(e) => setEstado(e.target.value)}>
+              <option value="">Todos</option>
+              {Object.values(EstadoReserva).map((e) => (
+                <option key={e} value={e}>
+                  {etiqueta(e)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {esAdmin && (
+            <div className="fs-campo" style={{ minWidth: 220 }}>
+              <label htmlFor="sucursal-reservas">Sucursal</label>
+              <select
+                id="sucursal-reservas"
+                className="fs-select"
+                value={sucursalFiltro}
+                onChange={(e) => setSucursalFiltro(e.target.value ? Number(e.target.value) : '')}
+              >
+                <option value="">Todas</option>
+                {sucursales.data?.map((s) => (
+                  <option key={s.id_sucursal} value={s.id_sucursal}>
+                    {s.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {consulta.isPending && <FilasSkeleton filas={4} />}
+      {consulta.isError && <ErrorEstado error={consulta.error} onReintentar={() => consulta.refetch()} />}
+      {consulta.data && consulta.data.items.length === 0 && (
+        <div className="fs-tarjeta fs-tarjeta--pad">
+          <Vacio titulo="Sin reservas" mensaje="No hay reservas que coincidan con el filtro seleccionado." />
+        </div>
+      )}
+
+      <div className="fs-rejilla-3">
+        {consulta.data?.items.map((r) => (
+          <article key={r.id_reserva} className="fs-panel">
+            <div className="fs-fila-entre">
+              <div>
+                <p className="fs-eyebrow">Reserva #{r.id_reserva}</p>
+                <h3>{r.cliente?.nombre ?? 'Cliente'}</h3>
+                <p className="fs-sub">{r.cliente?.telefono}</p>
+              </div>
+              <BadgeReserva estado={r.estado} />
+            </div>
+
+            <div className="fs-sub">
+              {r.sucursal?.nombre} - visita {fechaHora(r.horario_aproximado)}
+            </div>
+
+            <hr className="fs-divisor" />
+
+            <ul className="fs-pila" style={{ gap: 6, listStyle: 'none', margin: 0, padding: 0 }}>
+              {r.detalles.map((d) => (
+                <li key={d.id_detalle_reserva} style={{ fontSize: '0.88rem' }}>
+                  {d.cantidad} x {d.producto?.nombre}
+                  <span className="fs-sub">
+                    {' '}
+                    - {d.talla?.nombre} / {d.color?.nombre}
+                  </span>
+                </li>
+              ))}
+            </ul>
+
+            {r.observacion && <p className="fs-sub">Nota: {r.observacion}</p>}
+
+            {SIGUIENTES[r.estado].length > 0 && (
+              <div className="fs-fila-wrap">
+                {SIGUIENTES[r.estado].map((siguiente) => (
+                  <button
+                    key={siguiente}
+                    type="button"
+                    className={`fs-btn fs-btn--s${
+                      siguiente === EstadoReserva.CANCELADA || siguiente === EstadoReserva.VENCIDA
+                        ? ' fs-btn--contorno'
+                        : ' fs-btn--acento'
+                    }`}
+                    onClick={() => setConfirmacion({ id: r.id_reserva, estado: siguiente })}
+                  >
+                    {ACCION[siguiente]}
+                  </button>
+                ))}
+              </div>
+            )}
+          </article>
+        ))}
+      </div>
+
+      <Confirmacion
+        abierto={confirmacion !== null}
+        titulo="Actualizar reserva"
+        mensaje={
+          confirmacion
+            ? `La reserva pasara al estado ${etiqueta(confirmacion.estado)}. Confirmas la operacion?`
+            : ''
+        }
+        textoConfirmar="Actualizar"
+        peligro={
+          confirmacion?.estado === EstadoReserva.CANCELADA || confirmacion?.estado === EstadoReserva.VENCIDA
+        }
+        cargando={cambiar.isPending}
+        onConfirmar={aplicar}
+        onCancelar={() => setConfirmacion(null)}
+      />
+    </>
+  );
+}
