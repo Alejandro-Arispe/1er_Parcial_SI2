@@ -8,6 +8,7 @@ import { CreateProductDto } from './dto/create-product.dto.js';
 import { ListProductsQueryDto } from './dto/list-products-query.dto.js';
 import { UpdateProductDto } from './dto/update-product.dto.js';
 import { ProductsRepository, ProductWriteData } from './products.repository.js';
+import { productPrice } from '../../../common/utils/product-price.js';
 
 @Injectable()
 export class ProductsService {
@@ -243,25 +244,14 @@ export class ProductsService {
       colors: Array<{ color: unknown }>;
     },
   >(product: T) {
-    const price = Number(product.price.toString());
-    const discountPercent = Number(product.discountPercent.toString());
-    const now = new Date();
-    const promotionActive = Boolean(
-      discountPercent > 0 &&
-      product.promotionStart &&
-      product.promotionEnd &&
-      product.promotionStart <= now &&
-      product.promotionEnd >= now,
-    );
+    const pricing = productPrice(product);
 
     return {
       ...product,
-      price,
-      discountPercent,
-      currentPrice: promotionActive
-        ? Number((price * (1 - discountPercent / 100)).toFixed(2))
-        : price,
-      promotionActive,
+      price: pricing.price.toNumber(),
+      discountPercent: pricing.discountPercent.toNumber(),
+      currentPrice: pricing.currentPrice.toNumber(),
+      promotionActive: pricing.promotionActive,
       sizes: product.sizes.map(({ size }) => size),
       colors: product.colors.map(({ color }) => color),
     };

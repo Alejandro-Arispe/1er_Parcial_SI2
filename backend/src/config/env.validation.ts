@@ -15,10 +15,38 @@ export const environmentValidationSchema = Joi.object({
   DATABASE_CONNECTION_TIMEOUT_MS: Joi.number().integer().min(1).default(5000),
   JWT_SECRET: Joi.string().min(32).required(),
   JWT_EXPIRES_IN: Joi.string().default('1d'),
+  CHECKOUT_HOLD_MINUTES: Joi.number().integer().min(1).max(120).default(15),
+  STRIPE_SECRET_KEY: Joi.string()
+    .empty('')
+    .pattern(/^sk_test_[A-Za-z0-9]+$/)
+    .optional(),
+  STRIPE_WEBHOOK_SECRET: Joi.string()
+    .empty('')
+    .pattern(/^whsec_[A-Za-z0-9]+$/)
+    .optional(),
+  STRIPE_PUBLISHABLE_KEY: Joi.string()
+    .empty('')
+    .pattern(/^pk_test_[A-Za-z0-9]+$/)
+    .optional(),
+  SALES_CURRENCY: Joi.string()
+    .pattern(/^[A-Z]{3}$/)
+    .default('BOB'),
   PASSWORD_SALT_ROUNDS: Joi.number().integer().min(10).max(14).default(12),
+  RESERVATION_TIME_ZONE: Joi.string()
+    .custom((value: string, helpers) => {
+      try {
+        new Intl.DateTimeFormat('en', { timeZone: value }).format();
+        return value;
+      } catch {
+        return helpers.error('any.invalid');
+      }
+    })
+    .default('America/La_Paz'),
   SEED_ADMIN_EMAIL: Joi.string().email().optional(),
   SEED_ADMIN_PASSWORD: Joi.string().min(8).max(72).optional(),
-}).unknown(true);
+})
+  .and('STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_PUBLISHABLE_KEY')
+  .unknown(true);
 
 export const validateEnvironment = (
   config: Record<string, unknown>,
@@ -29,7 +57,10 @@ export const validateEnvironment = (
   });
 
   if (error) {
-    throw new Error(`Environment validation failed: ${error.message}`);
+    // Joi pattern errors may contain the supplied secret. Report names and codes only.
+    throw new Error(
+      `Environment validation failed: ${error.details.map((detail) => `${detail.path.join('.') || 'configuration'} (${detail.type})`).join(', ')}`,
+    );
   }
 
   return value as Record<string, unknown>;

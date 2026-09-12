@@ -6,13 +6,55 @@ PostgreSQL.
 ## Preparación local
 
 1. Copie `.env.example` como `.env` y ajuste `DATABASE_URL`.
-2. Cree una base de datos PostgreSQL llamada `fashion_store`.
+2. Cree una base de datos PostgreSQL llamada `tienda_ropa`.
 3. Instale dependencias con `npm install`.
 4. Aplique el esquema con `npm run prisma:migrate:deploy`.
 5. Cargue los datos iniciales con `npm run prisma:seed`.
 6. Inicie la API con `npm run start:dev`.
 
 La API utiliza por defecto el prefijo `http://localhost:3000/api/v1`.
+
+Para instalar el proyecto en otro equipo y poblar una base vacía, seguir la
+[guía de instalación y seed](docs/instalacion-y-seed.md). La carga completa se
+ejecuta con `npm run prisma:seed:demo` e incluye el seed base, usuarios de prueba,
+catálogo, inventario, reservas y ventas históricas. Requiere `SEED_DEMO_PASSWORD`.
+
+## Reservas
+
+El módulo permite reservar varias prendas por sucursal, gestionar su atención y
+liberar stock por cancelación o vencimiento al finalizar el día en Bolivia.
+Antes de iniciar, aplicar las migraciones pendientes con `npm run prisma:migrate:deploy`.
+
+Ver [guía de Reservas](docs/reservas.md) y
+[contrato OpenAPI](docs/reservations.openapi.json) para rutas, permisos, estados,
+datos de demostración y pruebas de concurrencia.
+
+## Carrito
+
+Para el carrito activo del cliente, ver la [guía de Carrito](docs/carrito.md)
+y su [contrato OpenAPI](docs/cart.openapi.json). Incluye consultas, cantidades,
+precios vigentes y disponibilidad por sucursal; el checkout corresponde a Ventas/Pagos.
+
+## Ventas y checkout
+
+Implementados ventas presenciales, compra parcial de reservas, checkout digital
+con stock apartado, idempotencia, historial y comprobante interno. La confirmación
+electrónica se integra con el módulo de Pagos/Stripe.
+Ver [guía de Ventas y checkout](docs/ventas-checkout.md).
+
+## Pagos / Stripe
+
+Implementados Payment Intents de tarjeta en modo prueba, webhook con firma y
+cuerpo original, confirmación idempotente, recuperación automática y reembolso
+de pagos de pedidos cancelados/vencidos. Configurar las tres variables `STRIPE_*`
+en `.env`. Ver [guía de Pagos](docs/pagos-stripe.md) y
+[contrato OpenAPI](docs/payments.openapi.json).
+
+## Reportes
+
+Ventas por moneda/sucursal/canal/día, productos más vendidos, stock actual y
+reservas por estado. Acceso para administradores y encargados de su sucursal.
+Ver [guía de Reportes](docs/reportes.md) y [OpenAPI](docs/reports.openapi.json).
 
 ## Comandos de base de datos
 
@@ -22,6 +64,7 @@ npm run prisma:generate
 npm run prisma:migrate:dev -- --name nombre_del_cambio
 npm run prisma:migrate:deploy
 npm run prisma:seed
+npm run prisma:seed:demo
 npm run prisma:studio
 ```
 

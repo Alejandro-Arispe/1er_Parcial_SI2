@@ -6,6 +6,8 @@ export enum InventoryMovementType {
   RETURN = 'RETURN',
   ADJUSTMENT = 'ADJUSTMENT',
   PENDING_ENTRY = 'PENDING_ENTRY',
+  CHECKOUT_HOLD = 'CHECKOUT_HOLD',
+  CHECKOUT_RELEASE = 'CHECKOUT_RELEASE',
 }
 
 export enum InventoryMovementStatus {

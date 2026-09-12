@@ -20,11 +20,16 @@
     "test:cov": "vitest run --coverage",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
+    "test:stripe:smoke": "vitest run --config ./vitest.config.stripe.ts",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:seed": "prisma db seed",
+    "prisma:seed:demo": "tsx prisma/seed-demo.ts",
+    "prisma:seed:reservations": "tsx prisma/seed-reservations.ts",
+    "prisma:seed:cart": "tsx prisma/seed-cart.ts",
+    "prisma:seed:sales": "tsx prisma/seed-sales.ts",
     "prisma:studio": "prisma studio",
     "postinstall": "prisma generate"
   },
@@ -46,7 +51,8 @@
     "passport-jwt": "^4.0.1",
     "pg": "^8.23.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "stripe": "^22.6.2"
   },
   "devDependencies": {
     "@nestjs/cli": "^12.0.0",

@@ -12,6 +12,11 @@ import { CatalogModule } from './modules/catalog/catalog.module.js';
 import { InventoryModule } from './modules/inventory/inventory.module.js';
 import { RolesModule } from './modules/roles/roles.module.js';
 import { UsersModule } from './modules/users/users.module.js';
+import { ReservationsModule } from './modules/reservations/reservations.module.js';
+import { CartModule } from './modules/cart/cart.module.js';
+import { SalesModule } from './modules/sales/sales.module.js';
+import { PaymentsModule } from './modules/payments/payments.module.js';
+import { ReportsModule } from './modules/reports/reports.module.js';
 
 @Module({
   imports: [
@@ -29,6 +34,11 @@ import { UsersModule } from './modules/users/users.module.js';
     BranchesModule,
     CatalogModule,
     InventoryModule,
+    ReservationsModule,
+    CartModule,
+    SalesModule,
+    PaymentsModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

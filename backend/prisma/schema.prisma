@@ -23,6 +23,8 @@ enum InventoryMovementType {
   RETURN
   ADJUSTMENT
   PENDING_ENTRY
+  CHECKOUT_HOLD
+  CHECKOUT_RELEASE
 }
 
 enum InventoryMovementStatus {
@@ -88,6 +90,7 @@ enum PaymentStatus {
   APPROVED
   REJECTED
   VOIDED
+  REFUNDED
 }
 
 model User {
@@ -101,6 +104,7 @@ model User {
   client       Client?
   employee     Employee?
   roles        UserRole[]
+  createdSales Sale[] @relation("SaleCreator")
 
   @@map("usuarios")
 }
@@ -350,6 +354,7 @@ model Reservation {
   branchId        Int               @map("id_sucursal")
   reservedAt      DateTime          @default(now()) @map("fecha_reserva") @db.Timestamptz(3)
   approximateTime DateTime          @map("horario_aproximado") @db.Timestamptz(3)
+  expiresAt       DateTime          @map("fecha_vencimiento") @db.Timestamptz(3)
   status          ReservationStatus @default(PENDING) @map("estado")
   observation     String?           @map("observacion") @db.VarChar(500)
   updatedAt       DateTime          @updatedAt @map("fecha_actualizacion") @db.Timestamptz(3)
@@ -360,6 +365,7 @@ model Reservation {
 
   @@index([clientId, status])
   @@index([branchId, approximateTime, status])
+  @@index([status, expiresAt])
   @@map("reservas")
 }
 
@@ -370,6 +376,7 @@ model ReservationItem {
   sizeId        Int                   @map("id_talla")
   colorId       Int                   @map("id_color")
   quantity      Int                   @map("cantidad")
+  purchasedQuantity Int @default(0) @map("cantidad_comprada")
   status        ReservationItemStatus @default(PENDING) @map("estado")
   reservation   Reservation           @relation(fields: [reservationId], references: [id], onDelete: Cascade)
   product       Product               @relation(fields: [productId], references: [id], onDelete: Restrict)
@@ -382,6 +389,8 @@ model ReservationItem {
 }
 
 model Cart {
+  // One ACTIVE cart per client is enforced by a partial unique index in migration
+  // 20260912010000_active_cart_unique; historical carts remain unrestricted.
   id        Int        @id @default(autoincrement()) @map("id_carrito")
   clientId  Int        @map("id_cliente")
   createdAt DateTime   @default(now()) @map("fecha_creacion") @db.Timestamptz(3)
@@ -389,6 +398,7 @@ model Cart {
   status    CartStatus @default(ACTIVE) @map("estado")
   client    Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
   items     CartItem[]
+  sale      Sale?
 
   @@index([clientId, status])
   @@map("carritos")
@@ -418,6 +428,15 @@ model Sale {
   employeeId    Int?         @map("id_empleado")
   branchId      Int?         @map("id_sucursal")
   reservationId Int?         @unique @map("id_reserva")
+  cartId        Int?         @unique @map("id_carrito")
+  createdById   Int?         @map("id_usuario_creador")
+  idempotencyKey String?     @map("clave_idempotencia") @db.Uuid
+  requestHash   String?      @map("hash_solicitud") @db.VarChar(64)
+  currency      String       @default("BOB") @map("moneda") @db.VarChar(3)
+  stockReserved Boolean     @default(false) @map("stock_apartado")
+  expiresAt     DateTime?    @map("fecha_vencimiento") @db.Timestamptz(3)
+  confirmedAt   DateTime?    @map("fecha_confirmacion") @db.Timestamptz(3)
+  cancellationReason String? @map("motivo_cancelacion") @db.VarChar(100)
   soldAt        DateTime     @default(now()) @map("fecha") @db.Timestamptz(3)
   channel       SaleChannel  @map("canal")
   status        SaleStatus   @default(DRAFT) @map("estado")
@@ -427,6 +446,8 @@ model Sale {
   employee      Employee?    @relation(fields: [employeeId], references: [id], onDelete: SetNull)
   branch        Branch?      @relation(fields: [branchId], references: [id], onDelete: Restrict)
   reservation   Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  cart          Cart?        @relation(fields: [cartId], references: [id], onDelete: SetNull)
+  createdBy     User?        @relation("SaleCreator", fields: [createdById], references: [id], onDelete: SetNull)
   items         SaleItem[]
   payments      Payment[]
 
@@ -434,6 +455,8 @@ model Sale {
   @@index([employeeId])
   @@index([branchId, soldAt])
   @@index([channel, status])
+  @@unique([createdById, idempotencyKey])
+  @@index([status, expiresAt])
   @@map("ventas")
 }
 
@@ -446,6 +469,9 @@ model SaleItem {
   quantity  Int     @map("cantidad")
   unitPrice Decimal @map("precio_unitario") @db.Decimal(12, 2)
   discount  Decimal @default(0) @map("descuento") @db.Decimal(12, 2)
+  productName String? @map("nombre_producto") @db.VarChar(160)
+  sizeName String? @map("nombre_talla") @db.VarChar(30)
+  colorName String? @map("nombre_color") @db.VarChar(60)
   sale      Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
   product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
   size      Size    @relation(fields: [sizeId], references: [id], onDelete: Restrict)
@@ -464,10 +490,18 @@ model Payment {
   amount            Decimal       @map("monto") @db.Decimal(12, 2)
   status            PaymentStatus @default(PENDING) @map("estado")
   externalReference String?       @unique @map("referencia_externa") @db.VarChar(200)
+  stripeRequestKey  String        @unique @default(uuid()) @map("stripe_request_key") @db.Uuid
+  stripeIntentId    String?       @unique @map("stripe_intent_id") @db.VarChar(200)
+  stripeStatus      String?       @map("stripe_status") @db.VarChar(40)
+  stripeRefundId    String?       @unique @map("stripe_refund_id") @db.VarChar(200)
+  stripeRefundStatus String?      @map("stripe_refund_status") @db.VarChar(40)
+  refundRequestedAt DateTime?     @map("reembolso_solicitado_en") @db.Timestamptz(3)
+  lastStripeSyncAt  DateTime?     @map("stripe_sincronizado_en") @db.Timestamptz(3)
   paidAt            DateTime      @default(now()) @map("fecha") @db.Timestamptz(3)
   sale              Sale          @relation(fields: [saleId], references: [id], onDelete: Restrict)
 
   @@index([saleId, status])
+  @@index([status, lastStripeSyncAt])
   @@map("pagos")
 }
 

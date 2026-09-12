@@ -23,9 +23,7 @@ describe('UsersService', () => {
     vi.mocked(repository.findRolesByNames).mockResolvedValue([
       { id: 4, name: 'CUSTOMER' },
     ]);
-    vi.mocked(repository.create).mockImplementation(
-      async (data) => data as never,
-    );
+    vi.mocked(repository.create).mockResolvedValue({ id: 1 } as never);
 
     await service.createCustomer({
       name: 'Ana Cliente',
