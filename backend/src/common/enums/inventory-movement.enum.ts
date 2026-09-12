@@ -1,0 +1,15 @@
+export enum InventoryMovementType {
+  ENTRY = 'ENTRY',
+  SALE = 'SALE',
+  RESERVATION = 'RESERVATION',
+  RESERVATION_RELEASE = 'RESERVATION_RELEASE',
+  RETURN = 'RETURN',
+  ADJUSTMENT = 'ADJUSTMENT',
+  PENDING_ENTRY = 'PENDING_ENTRY',
+}
+
+export enum InventoryMovementStatus {
+  PENDING = 'PENDING',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+}
