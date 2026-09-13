@@ -12,13 +12,15 @@ import {
   type ReactNode,
 } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { obtenerToken } from '../api/http';
+import { obtenerToken, revisionSesion, suscribirSesion } from '../api/sesion';
 import { authService, type CredencialesLogin, type DatosRegistro } from '../services/auth.service';
-import { RolNombre, type Cliente, type Empleado, type Usuario } from '../types/domain';
+import { RolNombre, type Usuario } from '../types/domain';
 
 interface ContextoAuth {
   usuario: Usuario | null;
   cargando: boolean;
+  errorSesion: Error | null;
+  reintentarSesion: () => void;
   autenticado: boolean;
   roles: string[];
   esCliente: boolean;
@@ -34,45 +36,66 @@ const Contexto = createContext<ContextoAuth | null>(null);
 
 export function ProveedorAuth({ children }: { children: ReactNode }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
-  const [cargando, setCargando] = useState(true);
+  const [cargando, setCargando] = useState(() => Boolean(obtenerToken()));
+  const [errorSesion, setErrorSesion] = useState<Error | null>(null);
+  const [intento, setIntento] = useState(0);
   const queryClient = useQueryClient();
+
+  useEffect(
+    () =>
+      suscribirSesion((externa) => {
+        void queryClient.cancelQueries();
+        queryClient.clear();
+        setUsuario(null);
+        setErrorSesion(null);
+        setCargando(externa && Boolean(obtenerToken()));
+        if (externa && obtenerToken()) setIntento((actual) => actual + 1);
+      }),
+    [queryClient],
+  );
 
   // Rehidrata la sesion si hay token guardado.
   useEffect(() => {
     let activo = true;
-    if (!obtenerToken()) {
-      setCargando(false);
-      return;
-    }
+    if (!obtenerToken()) return;
+    const revision = revisionSesion();
+    const vigente = () => activo && revision === revisionSesion();
     authService
       .perfil()
-      .then((u) => activo && setUsuario(u))
-      .catch(() => activo && setUsuario(null))
-      .finally(() => activo && setCargando(false));
+      .then((u) => vigente() && setUsuario(u))
+      .catch((error: unknown) => {
+        if (vigente())
+          setErrorSesion(
+            error instanceof Error ? error : new Error('No pudimos recuperar la sesion.'),
+          );
+      })
+      .finally(() => vigente() && setCargando(false));
     return () => {
       activo = false;
     };
+  }, [intento]);
+
+  const reintentarSesion = useCallback(() => {
+    setErrorSesion(null);
+    setCargando(Boolean(obtenerToken()));
+    setIntento((actual) => actual + 1);
   }, []);
 
-  const iniciarSesion = useCallback(
-    async (credenciales: CredencialesLogin) => {
-      const u = await authService.login(credenciales);
-      setUsuario(u);
-      queryClient.clear();
-      return u;
-    },
-    [queryClient],
-  );
+  const iniciarSesion = useCallback(async (credenciales: CredencialesLogin) => {
+    const u = await authService.login(credenciales);
+    setUsuario(u);
+    setErrorSesion(null);
+    setCargando(false);
+    return u;
+  }, []);
 
-  const registrarse = useCallback(
-    async (datos: DatosRegistro) => {
-      const u = await authService.registrar(datos);
-      setUsuario(u);
-      queryClient.clear();
-      return u;
-    },
-    [queryClient],
-  );
+  const registrarse = useCallback(async (datos: DatosRegistro) => {
+    const u = await authService.registrar(datos);
+    setUsuario(u);
+    setErrorSesion(null);
+    setCargando(false);
+    return u;
+  }, []);
 
   const cerrarSesion = useCallback(async () => {
     await authService.logout();
@@ -82,22 +105,22 @@ export function ProveedorAuth({ children }: { children: ReactNode }) {
 
   const valor = useMemo<ContextoAuth>(() => {
     const roles = usuario?.roles.map((r) => String(r.nombre)) ?? [];
-    const cliente = usuario as Cliente | null;
-    const empleado = usuario as Empleado | null;
     return {
       usuario,
       cargando,
+      errorSesion,
+      reintentarSesion,
       autenticado: Boolean(usuario),
       roles,
       esCliente: roles.includes(RolNombre.CLIENTE),
-      idCliente: cliente?.id_cliente ?? null,
-      idSucursal: empleado?.id_sucursal ?? null,
+      idCliente: usuario?.id_cliente ?? null,
+      idSucursal: usuario?.id_sucursal ?? null,
       tieneRol: (...requeridos: string[]) => requeridos.some((r) => roles.includes(r)),
       iniciarSesion,
       registrarse,
       cerrarSesion,
     };
-  }, [usuario, cargando, iniciarSesion, registrarse, cerrarSesion]);
+  }, [usuario, cargando, errorSesion, reintentarSesion, iniciarSesion, registrarse, cerrarSesion]);
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;
 }

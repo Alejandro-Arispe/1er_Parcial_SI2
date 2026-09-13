@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ValidationPipe,
+} from '@nestjs/common';
+import { UpdateProductDto } from './dto/update-product.dto.js';
 import { ProductsRepository } from './products.repository.js';
 import { ProductsService } from './products.service.js';
 
@@ -90,5 +95,82 @@ describe('ProductsService', () => {
     await expect(service.update(1, { sizeIds: [2] })).rejects.toThrow(
       ConflictException,
     );
+  });
+
+  describe('promotion date updates', () => {
+    beforeEach(() => {
+      vi.mocked(repository.findById).mockResolvedValue(productFixture as never);
+      vi.mocked(repository.getDependencies).mockResolvedValue([
+        1,
+        1,
+        { active: true, seasonId: 1 },
+        1,
+        1,
+        1,
+      ]);
+      vi.mocked(repository.findBySupplierAndName).mockResolvedValue(null);
+      vi.mocked(repository.update).mockImplementation(
+        async (_id, data) =>
+          ({
+            ...productFixture,
+            ...Object.fromEntries(
+              Object.entries(data).filter(([, value]) => value !== undefined),
+            ),
+          }) as never,
+      );
+    });
+
+    it('clears both dates and stops applying the discount', async () => {
+      const dto = await new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+        transformOptions: { enableImplicitConversion: true },
+      }).transform(
+        { promotionStart: null, promotionEnd: null },
+        { type: 'body', metatype: UpdateProductDto },
+      );
+      const result = await service.update(1, dto);
+      expect(repository.update).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          promotionStart: null,
+          promotionEnd: null,
+        }),
+        undefined,
+        undefined,
+      );
+      expect(result.promotionStart).toBeNull();
+      expect(result.promotionEnd).toBeNull();
+      expect(result.promotionActive).toBe(false);
+      expect(result.currentPrice).toBe(100);
+    });
+
+    it('preserves the dates when updating an unrelated field', async () => {
+      const result = await service.update(1, { name: 'Camisa nueva' });
+      expect(result.promotionStart).toEqual(productFixture.promotionStart);
+      expect(result.promotionEnd).toEqual(productFixture.promotionEnd);
+      expect(result.currentPrice).toBe(80);
+    });
+
+    it.each([
+      { promotionStart: null },
+      { promotionEnd: null },
+      { promotionStart: '2100-01-01' },
+    ])(
+      'rejects an incomplete or inverted resulting period: %j',
+      async (update) => {
+        await expect(service.update(1, update)).rejects.toThrow(
+          BadRequestException,
+        );
+        expect(repository.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it('allows changing one date while preserving the other', async () => {
+      const result = await service.update(1, { promotionEnd: '2098-01-01' });
+      expect(result.promotionStart).toEqual(productFixture.promotionStart);
+      expect(result.promotionEnd).toEqual(new Date('2098-01-01'));
+    });
   });
 });

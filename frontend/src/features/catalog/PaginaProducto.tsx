@@ -1,3 +1,4 @@
+import { useIsMutating } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BadgeStock } from '../../components/ui/Badges';
@@ -5,8 +6,8 @@ import { Cargando, ErrorEstado } from '../../components/ui/Estados';
 import { ImagenProducto } from '../../components/ui/ImagenProducto';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { useProducto, useRecursosRA } from '../../hooks/useCatalogo';
-import { useAgregarAlCarrito } from '../../hooks/useComercio';
+import { useProducto } from '../../hooks/useCatalogo';
+import { useAgregarAlCarrito, useCarrito } from '../../hooks/useComercio';
 import { useDisponibilidad, useRecomendaciones } from '../../hooks/useOperaciones';
 import { precioActual, promocionVigente, stockDisponible } from '../../lib/domain';
 import { fecha, moneda } from '../../lib/format';
@@ -20,9 +21,10 @@ export default function PaginaProducto() {
   const { autenticado, esCliente } = useAuth();
 
   const consulta = useProducto(idProducto);
-  const recursosRA = useRecursosRA(idProducto);
   const recomendaciones = useRecomendaciones({ limite: 4 });
   const agregar = useAgregarAlCarrito();
+  const carrito = useCarrito();
+  const cambiandoCarrito = useIsMutating({ mutationKey: ['carrito', 'cambio'] }) > 0;
 
   const [idTalla, setIdTalla] = useState<number | null>(null);
   const [idColor, setIdColor] = useState<number | null>(null);
@@ -38,12 +40,32 @@ export default function PaginaProducto() {
   );
 
   if (consulta.isPending) return <Cargando texto="Cargando prenda..." />;
-  if (consulta.isError) return <ErrorEstado error={consulta.error} onReintentar={() => consulta.refetch()} />;
+  if (consulta.isError)
+    return <ErrorEstado error={consulta.error} onReintentar={() => consulta.refetch()} />;
 
   const producto = consulta.data!;
+  if (!producto.activo)
+    return (
+      <div className="fs-contenedor fs-seccion">
+        <h1>Prenda no disponible</h1>
+        <p>Esta prenda ya no esta activa en el catalogo.</p>
+        <Link to="/catalogo">Volver al catalogo</Link>
+      </div>
+    );
   const enPromo = promocionVigente(producto);
   const precio = precioActual(producto);
-  const seleccionCompleta = Boolean(idTalla && idColor);
+  const seleccionCompleta = Boolean(
+    idTalla &&
+    idColor &&
+    producto.tallas.some((t) => t.id_talla === idTalla) &&
+    producto.colores.some((c) => c.id_color === idColor),
+  );
+  const maximoPorSucursal = Math.max(0, ...(disponibilidad.data ?? []).map(stockDisponible));
+  const enCarrito =
+    carrito.detalles.find(
+      (d) => d.id_producto === idProducto && d.id_talla === idTalla && d.id_color === idColor,
+    )?.cantidad ?? 0;
+  const maximoAgregar = Math.max(0, Math.min(100, maximoPorSucursal) - enCarrito);
 
   async function agregarAlCarrito() {
     if (!autenticado) {
@@ -54,6 +76,13 @@ export default function PaginaProducto() {
       toast.error('Solo las cuentas de cliente pueden comprar en linea.');
       return;
     }
+    if (
+      !seleccionCompleta ||
+      cantidad > maximoAgregar ||
+      !Number.isInteger(cantidad) ||
+      cantidad < 1
+    )
+      return;
     try {
       await agregar.mutateAsync({
         id_producto: idProducto,
@@ -78,7 +107,9 @@ export default function PaginaProducto() {
       <nav className="fs-sub" style={{ paddingTop: 20 }}>
         <Link to="/catalogo">Catalogo</Link>
         {' / '}
-        <Link to={`/catalogo?id_categoria=${producto.id_categoria}`}>{producto.categoria?.nombre}</Link>
+        <Link to={`/catalogo?id_categoria=${producto.id_categoria}`}>
+          {producto.categoria?.nombre}
+        </Link>
       </nav>
 
       <div className="fs-detalle">
@@ -114,7 +145,10 @@ export default function PaginaProducto() {
                   key={t.id_talla}
                   type="button"
                   className={`fs-chip${idTalla === t.id_talla ? ' fs-chip--activo' : ''}`}
-                  onClick={() => setIdTalla(t.id_talla)}
+                  onClick={() => {
+                    setIdTalla(t.id_talla);
+                    setCantidad(1);
+                  }}
                 >
                   {t.nombre}
                 </button>
@@ -130,7 +164,10 @@ export default function PaginaProducto() {
                   key={c.id_color}
                   type="button"
                   className={`fs-chip fs-chip--color${idColor === c.id_color ? ' fs-chip--activo' : ''}`}
-                  onClick={() => setIdColor(c.id_color)}
+                  onClick={() => {
+                    setIdColor(c.id_color);
+                    setCantidad(1);
+                  }}
                 >
                   <span className="fs-punto-color" style={{ background: c.codigo_hex }} />
                   {c.nombre}
@@ -141,14 +178,29 @@ export default function PaginaProducto() {
 
           <div className="fs-panel" style={{ gap: 12 }}>
             <div className="fs-fila-entre">
-              <p className="fs-filtros__titulo" style={{ margin: 0 }}>Disponibilidad por sucursal</p>
-              {seleccionCompleta && !disponibilidad.isPending && <BadgeStock disponible={totalDisponible} />}
+              <p className="fs-filtros__titulo" style={{ margin: 0 }}>
+                Disponibilidad por sucursal
+              </p>
+              {seleccionCompleta && disponibilidad.isSuccess && (
+                <BadgeStock disponible={totalDisponible} />
+              )}
             </div>
 
             {!seleccionCompleta && (
               <p className="fs-sub">Selecciona talla y color para ver el stock de cada tienda.</p>
             )}
-            {seleccionCompleta && disponibilidad.isPending && <p className="fs-sub">Consultando stock...</p>}
+            {seleccionCompleta && disponibilidad.isPending && (
+              <p className="fs-sub">Consultando stock...</p>
+            )}
+            {seleccionCompleta && disponibilidad.isError && (
+              <ErrorEstado
+                error={disponibilidad.error}
+                onReintentar={() => disponibilidad.refetch()}
+              />
+            )}
+            {seleccionCompleta && disponibilidad.data?.length === 0 && (
+              <p className="fs-sub">No hay existencias disponibles para esta combinacion.</p>
+            )}
             {seleccionCompleta && disponibilidad.data && (
               <ul className="fs-pila" style={{ gap: 8, listStyle: 'none', padding: 0, margin: 0 }}>
                 {disponibilidad.data.map((inv) => (
@@ -164,16 +216,26 @@ export default function PaginaProducto() {
             )}
           </div>
 
+          {seleccionCompleta && disponibilidad.isSuccess && (
+            <p className="fs-sub">
+              Una misma tienda debe disponer de la cantidad elegida.{' '}
+              {enCarrito > 0 && `Ya tienes ${enCarrito} unidades de esta variante en el carrito.`}
+            </p>
+          )}
           <div className="fs-fila-wrap">
             <div className="fs-cantidad">
-              <button type="button" onClick={() => setCantidad((c) => Math.max(1, c - 1))} disabled={cantidad <= 1}>
+              <button
+                type="button"
+                onClick={() => setCantidad((c) => Math.max(1, c - 1))}
+                disabled={cantidad <= 1}
+              >
                 -
               </button>
               <span>{cantidad}</span>
               <button
                 type="button"
                 onClick={() => setCantidad((c) => c + 1)}
-                disabled={seleccionCompleta && cantidad >= totalDisponible}
+                disabled={seleccionCompleta && cantidad >= maximoAgregar}
               >
                 +
               </button>
@@ -183,7 +245,12 @@ export default function PaginaProducto() {
               type="button"
               className="fs-btn fs-btn--acento fs-crecer"
               onClick={agregarAlCarrito}
-              disabled={!seleccionCompleta || totalDisponible < cantidad || agregar.isPending}
+              disabled={
+                !seleccionCompleta ||
+                !disponibilidad.isSuccess ||
+                maximoAgregar < cantidad ||
+                cambiandoCarrito
+              }
             >
               {agregar.isPending ? 'Agregando...' : 'Agregar al carrito'}
             </button>
@@ -192,17 +259,19 @@ export default function PaginaProducto() {
               type="button"
               className="fs-btn fs-btn--contorno"
               onClick={reservar}
-              disabled={!seleccionCompleta}
+              disabled={
+                !seleccionCompleta || !disponibilidad.isSuccess || maximoPorSucursal < cantidad
+              }
             >
               Reservar para probar
             </button>
           </div>
 
-          {recursosRA.data && recursosRA.data.length > 0 && (
+          {producto.tiene_recurso_ra && (
             <div className="fs-alerta fs-alerta--info">
               <span>
-                Esta prenda tiene probador virtual. Abre FashionStore en la app movil para verla con realidad
-                aumentada.
+                Esta prenda tiene probador virtual. Abre FashionStore en la app movil para verla con
+                realidad aumentada.
               </span>
             </div>
           )}

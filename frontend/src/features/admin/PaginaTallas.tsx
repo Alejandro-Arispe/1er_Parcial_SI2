@@ -17,7 +17,16 @@ export default function PaginaTallas() {
       idDe={(t) => t.id_talla}
       nuevo={{ nombre: '' }}
       columnas={[{ titulo: 'Nombre', render: (t) => t.nombre }]}
-      campos={[{ clave: 'nombre', etiqueta: 'Nombre', requerido: true, ayuda: 'Por ejemplo: XS, S, M, L.' }]}
+      campos={[
+        {
+          clave: 'nombre',
+          etiqueta: 'Nombre',
+          requerido: true,
+          minLength: 1,
+          maxLength: 30,
+          ayuda: 'Por ejemplo: XS, S, M, L.',
+        },
+      ]}
     />
   );
 }

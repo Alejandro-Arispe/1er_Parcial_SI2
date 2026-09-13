@@ -79,7 +79,11 @@ export default function App() {
           <Route index element={<PaginaInicio />} />
           <Route path="catalogo" element={<PaginaCatalogo />} />
           <Route path="producto/:id" element={<PaginaProducto />} />
-          <Route path="reservas/nueva" element={<PaginaNuevaReserva />} />
+          <Route path="reservas/nueva" element={
+            <RutaProtegida roles={[...ROLES_AREA.cliente]}>
+              <PaginaNuevaReserva />
+            </RutaProtegida>
+          } />
           <Route
             path="carrito"
             element={
@@ -149,6 +153,7 @@ export default function App() {
           <Route path="usuarios" element={<PaginaUsuarios />} />
           <Route path="roles" element={<PaginaRoles />} />
           <Route path="inventario" element={<PaginaInventarioAdmin />} />
+          <Route path="movimientos" element={<PaginaMovimientos />} />
           <Route path="reservas" element={<PaginaReservasOperacion />} />
           <Route path="ventas" element={<PaginaVentasOperacion />} />
           <Route path="reportes" element={<PaginaReportes />} />

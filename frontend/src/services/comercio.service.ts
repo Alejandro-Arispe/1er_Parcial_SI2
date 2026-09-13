@@ -1,32 +1,8 @@
-/**
- * Carrito, reservas, ventas y pagos.
- * Endpoints esperados:
- *   GET    /carrito                     -> Carrito
- *   POST   /carrito/items               -> Carrito
- *   PATCH  /carrito/items/:id           -> Carrito
- *   DELETE /carrito/items/:id           -> Carrito
- *   DELETE /carrito                     -> Carrito vacio
- *   GET    /reservas?id_sucursal&estado -> Paginado<Reserva>
- *   POST   /reservas                    -> Reserva
- *   PATCH  /reservas/:id/estado         -> Reserva
- *   POST   /reservas/:id/cancelar       -> Reserva
- *   GET    /ventas?...                  -> Paginado<Venta>
- *   POST   /ventas                      -> Venta
- *   POST   /ventas/:id/pagos            -> Pago
- */
+/** Tipos de seleccion compartidos. Carrito y reservas usan servicios reales separados; ventas y pagos siguen pendientes de migrar. */
 import { api } from '../api/http';
 import { endpoints } from '../api/endpoints';
 import type { Paginado, ParamsPaginacion } from '../types/api';
-import type {
-  CanalVenta,
-  Carrito,
-  EstadoReserva,
-  MetodoPago,
-  Pago,
-  Reserva,
-  TipoPago,
-  Venta,
-} from '../types/domain';
+import type { CanalVenta, EstadoReserva, MetodoPago, Pago, TipoPago, Venta } from '../types/domain';
 
 export interface LineaSeleccion {
   id_producto: number;
@@ -63,41 +39,9 @@ export interface FiltrosVenta extends ParamsPaginacion {
   hasta?: string;
 }
 
-export const carritoService = {
-  obtener() {
-    return api.get<Carrito>(endpoints.carrito.actual);
-  },
-  agregar(linea: LineaSeleccion) {
-    return api.post<Carrito>(endpoints.carrito.items, linea);
-  },
-  cambiarCantidad(idDetalle: number, cantidad: number) {
-    return api.patch<Carrito>(endpoints.carrito.item(idDetalle), { cantidad });
-  },
-  quitar(idDetalle: number) {
-    return api.delete<Carrito>(endpoints.carrito.item(idDetalle));
-  },
-  vaciar() {
-    return api.delete<Carrito>(endpoints.carrito.vaciar);
-  },
-};
+export { carritoService } from './carrito.service';
 
-export const reservasService = {
-  listar(filtros: FiltrosReserva = {}) {
-    return api.get<Paginado<Reserva>>(endpoints.reservas.lista, filtros);
-  },
-  obtener(id: number) {
-    return api.get<Reserva>(endpoints.reservas.detalle(id));
-  },
-  crear(datos: DatosReserva) {
-    return api.post<Reserva>(endpoints.reservas.crear, datos);
-  },
-  cambiarEstado(id: number, estado: EstadoReserva) {
-    return api.patch<Reserva>(endpoints.reservas.estado(id), { estado });
-  },
-  cancelar(id: number) {
-    return api.post<Reserva>(endpoints.reservas.cancelar(id));
-  },
-};
+export { reservasService } from './reservas.service';
 
 export const ventasService = {
   listar(filtros: FiltrosVenta = {}) {

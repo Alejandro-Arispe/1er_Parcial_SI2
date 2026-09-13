@@ -78,9 +78,13 @@ export class ProductsService {
     }
 
     const promotionStart =
-      dto.promotionStart ?? current.promotionStart?.toISOString();
+      dto.promotionStart === undefined
+        ? current.promotionStart?.toISOString()
+        : dto.promotionStart;
     const promotionEnd =
-      dto.promotionEnd ?? current.promotionEnd?.toISOString();
+      dto.promotionEnd === undefined
+        ? current.promotionEnd?.toISOString()
+        : dto.promotionEnd;
     this.validatePromotion(promotionStart, promotionEnd);
 
     const categoryId = dto.categoryId ?? current.categoryId;
@@ -184,7 +188,7 @@ export class ProductsService {
     }
   }
 
-  private validatePromotion(start?: string, end?: string): void {
+  private validatePromotion(start?: string | null, end?: string | null): void {
     if ((start && !end) || (!start && end)) {
       throw new BadRequestException(
         'promotionStart and promotionEnd must be provided together',
@@ -222,10 +226,14 @@ export class ProductsService {
       price: dto.price,
       imageUrl: dto.imageUrl,
       discountPercent: dto.discountPercent,
-      promotionStart: dto.promotionStart
-        ? new Date(dto.promotionStart)
-        : undefined,
-      promotionEnd: dto.promotionEnd ? new Date(dto.promotionEnd) : undefined,
+      promotionStart:
+        dto.promotionStart == null
+          ? dto.promotionStart
+          : new Date(dto.promotionStart),
+      promotionEnd:
+        dto.promotionEnd == null
+          ? dto.promotionEnd
+          : new Date(dto.promotionEnd),
       active: 'active' in dto ? dto.active : undefined,
       categoryId: dto.categoryId,
       seasonId: dto.seasonId,

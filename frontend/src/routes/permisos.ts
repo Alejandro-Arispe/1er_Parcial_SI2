@@ -24,10 +24,13 @@ const AREAS: Array<{ prefijo: string; roles: readonly string[] }> = [
   { prefijo: '/checkout', roles: ROLES_AREA.cliente },
   { prefijo: '/mis-compras', roles: ROLES_AREA.cliente },
   { prefijo: '/mis-reservas', roles: ROLES_AREA.cliente },
+  { prefijo: '/reservas/nueva', roles: ROLES_AREA.cliente },
 ];
 
 /** Indica si un usuario con esos roles puede abrir la ruta indicada. */
 export function puedeAcceder(ruta: string, roles: string[]): boolean {
+  if (!ruta.startsWith('/') || ruta.startsWith('//') || ruta.includes('\\')) return false;
+  ruta = ruta.split(/[?#]/)[0];
   const area = AREAS.find((a) => ruta === a.prefijo || ruta.startsWith(`${a.prefijo}/`) || ruta.startsWith(`${a.prefijo}?`));
   if (!area) return true;
   return area.roles.some((r) => roles.includes(r));

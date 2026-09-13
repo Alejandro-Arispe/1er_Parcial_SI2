@@ -20,6 +20,15 @@ export function longitudMinima(valor: string, minimo: number): string | undefine
   return valor.length >= minimo ? undefined : `Debe tener al menos ${minimo} caracteres`;
 }
 
+/** Misma politica que RegisterDto y CreateUserDto de NestJS. */
+export function passwordRegistro(valor: string): string | undefined {
+  if (valor.length < 8 || valor.length > 72) return 'La contrasena debe tener entre 8 y 72 caracteres';
+  if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/.test(valor)) {
+    return 'Incluye al menos una mayuscula, una minuscula y un numero';
+  }
+  return undefined;
+}
+
 export function numeroPositivo(valor: number | string, mensaje = 'Debe ser un numero mayor a cero'): string | undefined {
   const n = Number(valor);
   return Number.isFinite(n) && n > 0 ? undefined : mensaje;

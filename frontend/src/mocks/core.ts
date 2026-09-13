@@ -1,5 +1,6 @@
 /** Infraestructura del mock: tipos de ruta, sesion simulada y expansion de relaciones. */
 import { ErrorApi } from '../types/api';
+import { obtenerToken } from '../api/sesion';
 import type {
   Carrito,
   Cliente,
@@ -47,7 +48,7 @@ export interface RutaMock {
 export const TOKEN_PREFIJO = 'mock-token-';
 
 export function usuarioDesdeToken(): UsuarioMock | null {
-  const token = localStorage.getItem('fashionstore.token');
+  const token = obtenerToken();
   if (!token || !token.startsWith(TOKEN_PREFIJO)) return null;
   const id = Number(token.slice(TOKEN_PREFIJO.length));
   return usuarios.find((u) => u.id_usuario === id) ?? null;

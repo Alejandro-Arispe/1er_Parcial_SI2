@@ -1,3 +1,5 @@
+import { Paginacion } from '../../components/ui/Paginacion';
+import { SIGUIENTES_RESERVA as SIGUIENTES } from '../../lib/reservas';
 import { useState } from 'react';
 import { BadgeReserva } from '../../components/ui/Badges';
 import { ErrorEstado, FilasSkeleton, Vacio } from '../../components/ui/Estados';
@@ -9,33 +11,26 @@ import { useSucursales } from '../../hooks/useOperaciones';
 import { etiqueta, fechaHora } from '../../lib/format';
 import { EstadoReserva } from '../../types/domain';
 
-/** Mismas transiciones que valida el backend; aqui solo guian la operacion. */
-const SIGUIENTES: Record<string, EstadoReserva[]> = {
-  [EstadoReserva.PENDIENTE]: [EstadoReserva.PREPARANDO, EstadoReserva.CANCELADA],
-  [EstadoReserva.PREPARANDO]: [EstadoReserva.LISTA, EstadoReserva.CANCELADA],
-  [EstadoReserva.LISTA]: [EstadoReserva.CLIENTE_PRESENTE, EstadoReserva.VENCIDA],
-  [EstadoReserva.CLIENTE_PRESENTE]: [EstadoReserva.ATENDIDA, EstadoReserva.CANCELADA],
-  [EstadoReserva.ATENDIDA]: [],
-  [EstadoReserva.CANCELADA]: [],
-  [EstadoReserva.VENCIDA]: [],
-};
-
 const ACCION: Record<string, string> = {
   [EstadoReserva.PREPARANDO]: 'Comenzar preparacion',
   [EstadoReserva.LISTA]: 'Marcar como lista',
   [EstadoReserva.CLIENTE_PRESENTE]: 'Cliente en tienda',
-  [EstadoReserva.ATENDIDA]: 'Registrar atencion',
+  [EstadoReserva.ATENDIDA]: 'Cerrar atencion',
   [EstadoReserva.CANCELADA]: 'Cancelar',
-  [EstadoReserva.VENCIDA]: 'Marcar vencida',
 };
 
 export default function PaginaReservasOperacion() {
   const { idSucursal, tieneRol } = useAuth();
   const esAdmin = tieneRol('ADMINISTRADOR');
 
+  const [page, setPage] = useState(1);
   const [estado, setEstado] = useState('');
-  const [sucursalFiltro, setSucursalFiltro] = useState<number | ''>(esAdmin ? '' : (idSucursal ?? ''));
-  const [confirmacion, setConfirmacion] = useState<{ id: number; estado: EstadoReserva } | null>(null);
+  const [sucursalFiltro, setSucursalFiltro] = useState<number | ''>(
+    esAdmin ? '' : (idSucursal ?? ''),
+  );
+  const [confirmacion, setConfirmacion] = useState<{ id: number; estado: EstadoReserva } | null>(
+    null,
+  );
 
   const sucursales = useSucursales();
   const cambiar = useCambiarEstadoReserva();
@@ -43,7 +38,8 @@ export default function PaginaReservasOperacion() {
 
   const consulta = useReservas({
     estado: (estado || undefined) as EstadoReserva | undefined,
-    id_sucursal: sucursalFiltro || undefined,
+    id_sucursal: esAdmin ? sucursalFiltro || undefined : idSucursal || undefined,
+    page,
     page_size: 30,
   });
 
@@ -65,7 +61,9 @@ export default function PaginaReservasOperacion() {
         <div>
           <p className="fs-eyebrow">Operaciones</p>
           <h1>Reservas</h1>
-          <p className="fs-sub">Preparacion y atencion de las prendas apartadas por los clientes.</p>
+          <p className="fs-sub">
+            Preparacion y atencion de las prendas apartadas por los clientes.
+          </p>
         </div>
       </header>
 
@@ -73,7 +71,15 @@ export default function PaginaReservasOperacion() {
         <div className="fs-fila-wrap">
           <div className="fs-campo" style={{ minWidth: 220 }}>
             <label htmlFor="estado-reserva">Estado</label>
-            <select id="estado-reserva" className="fs-select" value={estado} onChange={(e) => setEstado(e.target.value)}>
+            <select
+              id="estado-reserva"
+              className="fs-select"
+              value={estado}
+              onChange={(e) => {
+                setEstado(e.target.value);
+                setPage(1);
+              }}
+            >
               <option value="">Todos</option>
               {Object.values(EstadoReserva).map((e) => (
                 <option key={e} value={e}>
@@ -90,7 +96,10 @@ export default function PaginaReservasOperacion() {
                 id="sucursal-reservas"
                 className="fs-select"
                 value={sucursalFiltro}
-                onChange={(e) => setSucursalFiltro(e.target.value ? Number(e.target.value) : '')}
+                onChange={(e) => {
+                  setSucursalFiltro(e.target.value ? Number(e.target.value) : '');
+                  setPage(1);
+                }}
               >
                 <option value="">Todas</option>
                 {sucursales.data?.map((s) => (
@@ -105,10 +114,15 @@ export default function PaginaReservasOperacion() {
       </section>
 
       {consulta.isPending && <FilasSkeleton filas={4} />}
-      {consulta.isError && <ErrorEstado error={consulta.error} onReintentar={() => consulta.refetch()} />}
+      {consulta.isError && (
+        <ErrorEstado error={consulta.error} onReintentar={() => consulta.refetch()} />
+      )}
       {consulta.data && consulta.data.items.length === 0 && (
         <div className="fs-tarjeta fs-tarjeta--pad">
-          <Vacio titulo="Sin reservas" mensaje="No hay reservas que coincidan con el filtro seleccionado." />
+          <Vacio
+            titulo="Sin reservas"
+            mensaje="No hay reservas que coincidan con el filtro seleccionado."
+          />
         </div>
       )}
 
@@ -128,6 +142,9 @@ export default function PaginaReservasOperacion() {
               {r.sucursal?.nombre} - visita {fechaHora(r.horario_aproximado)}
             </div>
 
+            {r.vence_en && (
+              <p className="fs-sub">Limite de presentacion: {fechaHora(r.vence_en)}</p>
+            )}
             <hr className="fs-divisor" />
 
             <ul className="fs-pila" style={{ gap: 6, listStyle: 'none', margin: 0, padding: 0 }}>
@@ -155,6 +172,7 @@ export default function PaginaReservasOperacion() {
                         ? ' fs-btn--contorno'
                         : ' fs-btn--acento'
                     }`}
+                    disabled={cambiar.isPending}
                     onClick={() => setConfirmacion({ id: r.id_reserva, estado: siguiente })}
                   >
                     {ACCION[siguiente]}
@@ -166,21 +184,32 @@ export default function PaginaReservasOperacion() {
         ))}
       </div>
 
+      {consulta.data && (
+        <Paginacion
+          page={consulta.data.page}
+          pageSize={consulta.data.page_size}
+          total={consulta.data.total}
+          onCambiar={setPage}
+        />
+      )}
       <Confirmacion
         abierto={confirmacion !== null}
         titulo="Actualizar reserva"
         mensaje={
           confirmacion
-            ? `La reserva pasara al estado ${etiqueta(confirmacion.estado)}. Confirmas la operacion?`
+            ? confirmacion.estado === EstadoReserva.ATENDIDA
+              ? 'Se cerrara la atencion y se liberaran las prendas que sigan reservadas. Esta accion no registra una venta ni un pago. Confirma al terminar la visita.'
+              : `La reserva pasara al estado ${etiqueta(confirmacion.estado)}. Confirmas la operacion?`
             : ''
         }
         textoConfirmar="Actualizar"
         peligro={
-          confirmacion?.estado === EstadoReserva.CANCELADA || confirmacion?.estado === EstadoReserva.VENCIDA
+          confirmacion?.estado === EstadoReserva.CANCELADA ||
+          confirmacion?.estado === EstadoReserva.VENCIDA
         }
         cargando={cambiar.isPending}
         onConfirmar={aplicar}
-        onCancelar={() => setConfirmacion(null)}
+        onCancelar={() => !cambiar.isPending && setConfirmacion(null)}
       />
     </>
   );

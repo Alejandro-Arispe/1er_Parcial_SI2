@@ -10,12 +10,13 @@ export default function PaginaSucursales() {
       titulo="Sucursales"
       descripcion="Tiendas fisicas donde se mantiene inventario y se atienden reservas."
       nombreSingular="Sucursal"
-      claveCache={claves.sucursales}
-      cargar={sucursalesService.listar}
+      claveCache={[...claves.sucursales, 'admin']}
+      cargar={sucursalesService.listarTodas}
       crear={(datos) => sucursalesService.crear(datos as Omit<Sucursal, 'id_sucursal'>)}
       actualizar={(id, datos) => sucursalesService.actualizar(id, datos)}
       eliminar={(id) => sucursalesService.eliminar(id)}
       idDe={(s) => s.id_sucursal}
+      bajaLogica={(item) => item.activa}
       nuevo={{ nombre: '', ciudad: '', direccion: '', telefono: '', activa: true }}
       columnas={[
         { titulo: 'Nombre', render: (s) => s.nombre },
@@ -25,11 +26,17 @@ export default function PaginaSucursales() {
         { titulo: 'Estado', render: (s) => <BadgeActivo activo={s.activa} /> },
       ]}
       campos={[
-        { clave: 'nombre', etiqueta: 'Nombre', requerido: true },
-        { clave: 'ciudad', etiqueta: 'Ciudad', requerido: true },
-        { clave: 'direccion', etiqueta: 'Direccion', requerido: true },
-        { clave: 'telefono', etiqueta: 'Telefono' },
-        { clave: 'activa', etiqueta: 'Sucursal activa', tipo: 'checkbox' },
+        { clave: 'nombre', etiqueta: 'Nombre', requerido: true, minLength: 2, maxLength: 120 },
+        { clave: 'ciudad', etiqueta: 'Ciudad', requerido: true, minLength: 2, maxLength: 100 },
+        {
+          clave: 'direccion',
+          etiqueta: 'Direccion',
+          requerido: true,
+          minLength: 5,
+          maxLength: 250,
+        },
+        { clave: 'telefono', etiqueta: 'Telefono', maxLength: 30 },
+        { clave: 'activa', etiqueta: 'Sucursal activa', tipo: 'checkbox', soloEdicion: true },
       ]}
     />
   );

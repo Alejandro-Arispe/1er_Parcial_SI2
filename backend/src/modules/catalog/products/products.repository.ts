@@ -34,8 +34,8 @@ export interface ProductWriteData {
   price?: number;
   imageUrl?: string;
   discountPercent?: number;
-  promotionStart?: Date;
-  promotionEnd?: Date;
+  promotionStart?: Date | null;
+  promotionEnd?: Date | null;
   active?: boolean;
   categoryId?: number;
   seasonId?: number;

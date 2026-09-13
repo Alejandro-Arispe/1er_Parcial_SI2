@@ -1,3 +1,4 @@
+import { USAR_MOCKS } from '../../api/config';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Confirmacion } from '../../components/ui/Modal';
@@ -10,13 +11,39 @@ import { CanalVenta, MetodoPago } from '../../types/domain';
 
 /** Metodos habilitados para la compra web mientras no exista pasarela real. */
 const METODOS = [
-  { valor: MetodoPago.PASARELA, titulo: 'Pasarela en linea', detalle: 'Se confirmara con la respuesta del backend' },
-  { valor: MetodoPago.TARJETA, titulo: 'Tarjeta de credito o debito', detalle: 'Cobro procesado por la tienda' },
+  {
+    valor: MetodoPago.PASARELA,
+    titulo: 'Pasarela en linea',
+    detalle: 'Se confirmara con la respuesta del backend',
+  },
+  {
+    valor: MetodoPago.TARJETA,
+    titulo: 'Tarjeta de credito o debito',
+    detalle: 'Cobro procesado por la tienda',
+  },
   { valor: MetodoPago.QR, titulo: 'Pago con QR', detalle: 'Escanea desde tu banca movil' },
-  { valor: MetodoPago.TRANSFERENCIA, titulo: 'Transferencia bancaria', detalle: 'Confirmacion sujeta a validacion' },
+  {
+    valor: MetodoPago.TRANSFERENCIA,
+    titulo: 'Transferencia bancaria',
+    detalle: 'Confirmacion sujeta a validacion',
+  },
 ];
 
 export default function PaginaCheckout() {
+  return USAR_MOCKS ? (
+    <CheckoutDemo />
+  ) : (
+    <div className="fs-contenedor fs-seccion">
+      <h1>Pago en linea proximamente</h1>
+      <p>Puedes seguir preparando tu carrito mientras habilitamos el pago en linea.</p>
+      <Link className="fs-btn fs-btn--acento" to="/carrito">
+        Volver al carrito
+      </Link>
+    </div>
+  );
+}
+
+function CheckoutDemo() {
   const carrito = useCarrito();
   const sucursales = useSucursales();
   const registrar = useRegistrarVenta();
@@ -36,7 +63,11 @@ export default function PaginaCheckout() {
         <Vacio
           titulo="No hay prendas para pagar"
           mensaje="Agrega prendas al carrito antes de continuar con la compra."
-          accion={<Link to="/catalogo" className="fs-btn fs-btn--acento">Ir al catalogo</Link>}
+          accion={
+            <Link to="/catalogo" className="fs-btn fs-btn--acento">
+              Ir al catalogo
+            </Link>
+          }
         />
       </div>
     );
@@ -142,7 +173,10 @@ export default function PaginaCheckout() {
             <div key={d.id_detalle_carrito} className="fs-resumen__linea">
               <span>
                 {d.cantidad} x {d.producto?.nombre}
-                <span className="fs-sub"> ({d.talla?.nombre} / {d.color?.nombre})</span>
+                <span className="fs-sub">
+                  {' '}
+                  ({d.talla?.nombre} / {d.color?.nombre})
+                </span>
               </span>
               <span className="fs-nums">{moneda(d.cantidad * d.precio_unitario)}</span>
             </div>

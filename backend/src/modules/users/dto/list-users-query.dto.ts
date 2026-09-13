@@ -31,7 +31,9 @@ export class ListUsersQueryDto {
   search?: string;
 
   @IsOptional()
-  @Transform(({ value }) => {
+  @Transform(({ obj, key }) => {
+    // Read the original query value before implicit Boolean conversion.
+    const value: unknown = obj[key];
     if (value === 'true' || value === true) return true;
     if (value === 'false' || value === false) return false;
     return value;

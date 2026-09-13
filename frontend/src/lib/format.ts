@@ -24,7 +24,13 @@ export function moneda(valor: number): string {
 
 export function fecha(valor: string | Date | null | undefined): string {
   if (!valor) return '-';
-  const d = valor instanceof Date ? valor : new Date(valor);
+  // Una fecha comercial sin hora es un dia de calendario, no medianoche UTC.
+  const d =
+    valor instanceof Date
+      ? valor
+      : /^\d{4}-\d{2}-\d{2}$/.test(valor)
+        ? new Date(`${valor}T00:00:00`)
+        : new Date(valor);
   return Number.isNaN(d.getTime()) ? '-' : fechaFmt.format(d);
 }
 

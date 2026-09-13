@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { USAR_MOCKS } from '../../api/config';
+import { ErrorApi } from '../../types/api';
 import { puedeAcceder, rutaInicialPorRol } from '../../routes/permisos';
 import { email as validarEmail, hayErrores, requerido, type Errores } from '../../lib/validacion';
 
@@ -50,7 +52,7 @@ export default function PaginaLogin() {
       const inicio = rutaInicialPorRol(roles);
       navegar(destino && puedeAcceder(destino, roles) ? destino : inicio, { replace: true });
     } catch (error) {
-      setErrorGeneral(error instanceof Error ? error.message : 'No pudimos iniciar sesion.');
+      setErrorGeneral(error instanceof ErrorApi ? error.mensajes.join(' ') : error instanceof Error ? error.message : 'No pudimos iniciar sesion.');
     } finally {
       setEnviando(false);
     }
@@ -111,7 +113,7 @@ export default function PaginaLogin() {
             No tienes cuenta? <Link to="/registro" style={{ color: 'var(--fs-acento)' }}>Crea una aqui</Link>
           </p>
 
-          <div className="fs-pila" style={{ gap: 8 }}>
+          {USAR_MOCKS && <div className="fs-pila" style={{ gap: 8 }}>
             <p className="fs-eyebrow">Cuentas de prueba</p>
             <div className="fs-demo-cuentas">
               {CUENTAS_DEMO.map((c) => (
@@ -126,7 +128,7 @@ export default function PaginaLogin() {
                 </button>
               ))}
             </div>
-          </div>
+          </div>}
         </form>
       </div>
     </div>

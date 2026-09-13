@@ -1,3 +1,4 @@
+import { SIGUIENTES_RESERVA, CANCELABLES_CLIENTE } from '../../lib/reservas';
 import { precioActual, stockDisponible, totalLineas } from '../../lib/domain';
 import {
   CanalVenta,
@@ -112,7 +113,10 @@ const rutasCarrito: RutaMock[] = [
       if (!id_talla || !id_color) invalido('Selecciona talla y color antes de agregar al carrito.');
 
       const disponibleTotal = inventario
-        .filter((i) => i.id_producto === id_producto && i.id_talla === id_talla && i.id_color === id_color)
+        .filter(
+          (i) =>
+            i.id_producto === id_producto && i.id_talla === id_talla && i.id_color === id_color,
+        )
         .reduce((acc, i) => acc + stockDisponible(i), 0);
       if (disponibleTotal < cantidad) {
         invalido('No hay stock suficiente de esa combinacion de talla y color.');
@@ -174,15 +178,7 @@ const rutasCarrito: RutaMock[] = [
 
 /* ---------------- reservas ---------------- */
 
-const TRANSICIONES: Record<string, EstadoReserva[]> = {
-  PENDIENTE: [EstadoReserva.PREPARANDO, EstadoReserva.CANCELADA, EstadoReserva.VENCIDA],
-  PREPARANDO: [EstadoReserva.LISTA, EstadoReserva.CANCELADA],
-  LISTA: [EstadoReserva.CLIENTE_PRESENTE, EstadoReserva.CANCELADA, EstadoReserva.VENCIDA],
-  CLIENTE_PRESENTE: [EstadoReserva.ATENDIDA, EstadoReserva.CANCELADA],
-  ATENDIDA: [],
-  CANCELADA: [],
-  VENCIDA: [],
-};
+const TRANSICIONES = SIGUIENTES_RESERVA;
 
 function liberarReserva(reserva: Reserva, idEmpleado: number | null) {
   for (const d of reserva.detalles) {
@@ -208,7 +204,7 @@ const rutasReservas: RutaMock[] = [
       const { params } = ctx;
       let lista = reservas.map(expandirReserva);
 
-      if (usuario.id_cliente && !usuario.id_empleado) {
+      if (params.propias || (usuario.id_cliente && !usuario.id_empleado)) {
         lista = lista.filter((r) => r.id_cliente === usuario.id_cliente);
       }
       const idSucursal = num(params.id_sucursal);
@@ -267,7 +263,13 @@ const rutasReservas: RutaMock[] = [
       for (const l of lineas) {
         const inv = registroInventario(id_sucursal, l)!;
         inv.cantidad_reservada += l.cantidad;
-        registrarMovimiento(inv.id_inventario, TipoMovimiento.RESERVA, l.cantidad, `R-${id_reserva}`, null);
+        registrarMovimiento(
+          inv.id_inventario,
+          TipoMovimiento.RESERVA,
+          l.cantidad,
+          `R-${id_reserva}`,
+          null,
+        );
       }
 
       reservas.unshift(reserva);
@@ -285,12 +287,12 @@ const rutasReservas: RutaMock[] = [
       if (!TRANSICIONES[reserva.estado]?.includes(estado)) {
         invalido(`No es posible pasar de ${reserva.estado} a ${estado}.`);
       }
-      if (estado === EstadoReserva.CANCELADA || estado === EstadoReserva.VENCIDA) {
+      if (estado === EstadoReserva.CANCELADA || estado === EstadoReserva.ATENDIDA) {
         liberarReserva(reserva, usuario.id_empleado ?? null);
       }
-      if (estado === EstadoReserva.ATENDIDA) {
-        reserva.detalles.forEach((d) => (d.estado = 'ATENDIDA'));
-      }
+      if (estado === EstadoReserva.LISTA) reserva.detalles.forEach((d) => (d.estado = 'Preparada'));
+      if (estado === EstadoReserva.ATENDIDA || estado === EstadoReserva.CANCELADA)
+        reserva.detalles.forEach((d) => (d.estado = 'Devuelta'));
       reserva.estado = estado;
       return expandirReserva(reserva);
     },
@@ -302,6 +304,11 @@ const rutasReservas: RutaMock[] = [
       const usuario = requiereSesion(ctx);
       const reserva = reservas.find((x) => x.id_reserva === Number(ctx.partes[0]));
       if (!reserva) noEncontrado('reserva');
+      if (
+        usuario.id_cliente === reserva.id_cliente &&
+        !CANCELABLES_CLIENTE.includes(reserva.estado)
+      )
+        invalido('La sucursal debe cerrar la reserva cuando el cliente ya esta presente.');
       if (!TRANSICIONES[reserva.estado]?.includes(EstadoReserva.CANCELADA)) {
         invalido('Esta reserva ya no se puede cancelar.');
       }
@@ -323,7 +330,7 @@ const rutasVentas: RutaMock[] = [
       const { params } = ctx;
       let lista = ventas.map(expandirVenta);
 
-      if (usuario.id_cliente && !usuario.id_empleado) {
+      if (params.propias || (usuario.id_cliente && !usuario.id_empleado)) {
         lista = lista.filter((v) => v.id_cliente === usuario.id_cliente);
       }
       const idSucursal = num(params.id_sucursal);
@@ -371,7 +378,8 @@ const rutasVentas: RutaMock[] = [
       const detalles: DetalleVenta[] = lineas.map((l) => {
         const producto = productos.find((p) => p.id_producto === l.id_producto)!;
         const unitario = producto.precio;
-        const descuento = Math.round(((unitario * producto.descuento_pct) / 100) * l.cantidad * 100) / 100;
+        const descuento =
+          Math.round(((unitario * producto.descuento_pct) / 100) * l.cantidad * 100) / 100;
         return {
           id_detalle_venta: siguienteId('detalleVenta'),
           id_venta,

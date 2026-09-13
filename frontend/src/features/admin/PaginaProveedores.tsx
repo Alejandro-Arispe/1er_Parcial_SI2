@@ -1,3 +1,4 @@
+import { email } from '../../lib/validacion';
 import { BadgeActivo } from '../../components/ui/Badges';
 import { proveedoresService } from '../../services/organizacion.service';
 import { claves } from '../../hooks/claves';
@@ -16,6 +17,8 @@ export default function PaginaProveedores() {
       actualizar={(id, datos) => proveedoresService.actualizar(id, datos)}
       eliminar={(id) => proveedoresService.eliminar(id)}
       idDe={(p) => p.id_proveedor}
+      bajaLogica={(item) => item.activo}
+      validar={(d) => (d.email?.trim() ? { email: email(d.email) } : {})}
       nuevo={{ nombre: '', contacto: '', telefono: '', email: '', activo: true }}
       columnas={[
         { titulo: 'Proveedor', render: (p) => p.nombre },
@@ -25,11 +28,11 @@ export default function PaginaProveedores() {
         { titulo: 'Estado', render: (p) => <BadgeActivo activo={p.activo} /> },
       ]}
       campos={[
-        { clave: 'nombre', etiqueta: 'Nombre', requerido: true },
-        { clave: 'contacto', etiqueta: 'Persona de contacto' },
-        { clave: 'telefono', etiqueta: 'Telefono' },
-        { clave: 'email', etiqueta: 'Correo electronico' },
-        { clave: 'activo', etiqueta: 'Proveedor activo', tipo: 'checkbox' },
+        { clave: 'nombre', etiqueta: 'Nombre', requerido: true, minLength: 2, maxLength: 150 },
+        { clave: 'contacto', etiqueta: 'Persona de contacto', maxLength: 120 },
+        { clave: 'telefono', etiqueta: 'Telefono', maxLength: 30 },
+        { clave: 'email', etiqueta: 'Correo electronico', maxLength: 180 },
+        { clave: 'activo', etiqueta: 'Proveedor activo', tipo: 'checkbox', soloEdicion: true },
       ]}
     />
   );

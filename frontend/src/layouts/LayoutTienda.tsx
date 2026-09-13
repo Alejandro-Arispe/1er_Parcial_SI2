@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCarrito } from '../hooks/useComercio';
 import { iniciales } from '../lib/format';
 import { RolNombre } from '../types/domain';
+import { rutaInicialPorRol } from '../routes/permisos';
 import { AsistenteIA } from '../features/ia/AsistenteIA';
 
 const ENLACES = [
@@ -13,7 +14,7 @@ const ENLACES = [
 ];
 
 export function LayoutTienda() {
-  const { usuario, autenticado, esCliente, tieneRol, cerrarSesion } = useAuth();
+  const { usuario, roles, autenticado, esCliente, tieneRol, cerrarSesion } = useAuth();
   const { unidades } = useCarrito();
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [asistenteAbierto, setAsistenteAbierto] = useState(false);
@@ -71,7 +72,7 @@ export function LayoutTienda() {
               </>
             )}
             {panelInterno && (
-              <NavLink to="/admin" className="fs-header__enlace" onClick={() => setMenuAbierto(false)}>
+              <NavLink to={rutaInicialPorRol(roles)} className="fs-header__enlace" onClick={() => setMenuAbierto(false)}>
                 Panel interno
               </NavLink>
             )}

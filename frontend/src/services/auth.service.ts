@@ -1,12 +1,15 @@
 /**
- * Autenticacion.
- * Endpoints esperados:
- *   POST /auth/login     -> { access_token, usuario }
- *   POST /auth/registro  -> { access_token, usuario }
- *   GET  /auth/perfil    -> Usuario
- *   POST /auth/logout    -> { ok }
+ * Autenticacion contra el contrato NestJS. La UI conserva su modelo en español.
  */
-import { api, guardarToken } from '../api/http';
+import { api } from '../api/http';
+import { guardarToken, revisionSesion } from '../api/sesion';
+import {
+  adaptarUsuario,
+  type RegistroBackend,
+  type SesionBackend,
+  type UsuarioBackend,
+} from '../api/auth.contratos';
+import { ErrorApi } from '../types/api';
 import { endpoints } from '../api/endpoints';
 import type { Usuario } from '../types/domain';
 
@@ -23,33 +26,44 @@ export interface DatosRegistro {
   direccion?: string;
 }
 
-export interface RespuestaSesion {
-  access_token: string;
-  usuario: Usuario;
+async function crearSesion(
+  url: string,
+  datos: CredencialesLogin | RegistroBackend,
+): Promise<Usuario> {
+  const revision = revisionSesion();
+  const sesion = await api.post<SesionBackend>(url, datos);
+  if (revision !== revisionSesion()) {
+    throw new ErrorApi('La sesion cambio mientras se procesaba la solicitud. Vuelve a intentarlo.');
+  }
+  if (!sesion.accessToken || sesion.tokenType !== 'Bearer' || !sesion.user?.active) {
+    throw new ErrorApi('El servidor no devolvio una sesion valida.', 502);
+  }
+  const usuario = adaptarUsuario(sesion.user);
+  guardarToken(sesion.accessToken);
+  return usuario;
 }
 
 export const authService = {
-  async login(credenciales: CredencialesLogin): Promise<Usuario> {
-    const data = await api.post<RespuestaSesion>(endpoints.auth.login, credenciales);
-    guardarToken(data.access_token);
-    return data.usuario;
+  login({ email, password }: CredencialesLogin): Promise<Usuario> {
+    return crearSesion(endpoints.auth.login, { email: email.trim().toLowerCase(), password });
   },
 
-  async registrar(datos: DatosRegistro): Promise<Usuario> {
-    const data = await api.post<RespuestaSesion>(endpoints.auth.registro, datos);
-    guardarToken(data.access_token);
-    return data.usuario;
+  registrar(datos: DatosRegistro): Promise<Usuario> {
+    return crearSesion(endpoints.auth.registro, {
+      name: datos.nombre.trim(),
+      email: datos.email.trim().toLowerCase(),
+      password: datos.password,
+      ...(datos.telefono?.trim() ? { phone: datos.telefono.trim() } : {}),
+      ...(datos.direccion?.trim() ? { address: datos.direccion.trim() } : {}),
+    });
   },
 
-  perfil(): Promise<Usuario> {
-    return api.get<Usuario>(endpoints.auth.perfil);
+  async perfil(): Promise<Usuario> {
+    return adaptarUsuario(await api.get<UsuarioBackend>(endpoints.auth.perfil));
   },
 
   async logout(): Promise<void> {
-    try {
-      await api.post(endpoints.auth.logout);
-    } finally {
-      guardarToken(null);
-    }
+    // Cierre local de JWT: el backend no expone un endpoint logout.
+    guardarToken(null);
   },
 };

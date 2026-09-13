@@ -1,6 +1,6 @@
 import { stockDisponible } from '../../lib/domain';
 import { TipoMovimiento, type MovimientoInventario } from '../../types/domain';
-import { inventario, movimientos, productos, siguienteId } from '../db';
+import { inventario, movimientos, productos, sucursales, siguienteId } from '../db';
 import {
   expandirInventario,
   expandirMovimiento,
@@ -24,6 +24,72 @@ const AFECTA_FISICO: Record<string, number> = {
 };
 
 export const rutasInventario: RutaMock[] = [
+  {
+    metodo: 'POST',
+    patron: /^\/inventario\/entradas$/,
+    handler: ({ body, usuario }) => {
+      const product = productos.find((p) => p.id_producto === Number(body.id_producto) && p.activo);
+      if (
+        !product ||
+        !product.tallas.some((t) => t.id_talla === Number(body.id_talla)) ||
+        !product.colores.some((c) => c.id_color === Number(body.id_color))
+      )
+        invalido('Variante invalida.');
+      if (!sucursales.some((s) => s.id_sucursal === Number(body.id_sucursal) && s.activa))
+        invalido('Sucursal inactiva o inexistente.');
+      let inv = inventario.find(
+        (i) =>
+          i.id_sucursal === Number(body.id_sucursal) &&
+          i.id_producto === Number(body.id_producto) &&
+          i.id_talla === Number(body.id_talla) &&
+          i.id_color === Number(body.id_color),
+      );
+      if (!inv) {
+        inv = {
+          id_inventario: siguienteId('inventario'),
+          id_sucursal: Number(body.id_sucursal),
+          id_producto: Number(body.id_producto),
+          id_talla: Number(body.id_talla),
+          id_color: Number(body.id_color),
+          cantidad_fisica: 0,
+          cantidad_reservada: 0,
+        };
+        inventario.push(inv);
+      }
+      const pendiente = Boolean(body.pendiente);
+      if (!pendiente) inv.cantidad_fisica += Number(body.cantidad);
+      const movimiento: MovimientoInventario = {
+        id_movimiento: siguienteId('movimiento'),
+        id_inventario: inv.id_inventario,
+        tipo: pendiente ? TipoMovimiento.INGRESO_PENDIENTE : TipoMovimiento.ENTRADA,
+        cantidad: Number(body.cantidad),
+        estado: pendiente ? 'PENDIENTE' : 'COMPLETADO',
+        fecha: new Date().toISOString(),
+        fecha_programada: pendiente ? body.fecha_programada : null,
+        referencia: body.referencia ?? '',
+        observacion: body.observacion ?? '',
+        id_empleado: usuario?.id_empleado ?? null,
+      };
+      movimientos.push(movimiento);
+      return expandirMovimiento(movimiento);
+    },
+  },
+  {
+    metodo: 'POST',
+    patron: /^\/inventario\/movimientos\/(\d+)\/completar$/,
+    handler: ({ partes }) => {
+      const m = movimientos.find((v) => v.id_movimiento === Number(partes[0]));
+      if (!m) noEncontrado('movimiento');
+      if (m.estado !== 'PENDIENTE' || m.tipo !== TipoMovimiento.INGRESO_PENDIENTE)
+        invalido('La entrada ya no esta pendiente.');
+      const inv = inventario.find((i) => i.id_inventario === m.id_inventario);
+      if (!inv) noEncontrado('inventario');
+      inv.cantidad_fisica += m.cantidad;
+      m.estado = 'COMPLETADO';
+      m.fecha = new Date().toISOString();
+      return expandirMovimiento(m);
+    },
+  },
   {
     metodo: 'GET',
     patron: /^\/inventario$/,
@@ -85,6 +151,14 @@ export const rutasInventario: RutaMock[] = [
       let lista = movimientos.map(expandirMovimiento);
       if (idSucursal) lista = lista.filter((m) => m.inventario?.id_sucursal === idSucursal);
       if (tipo) lista = lista.filter((m) => m.tipo === tipo);
+      if (params.id_inventario)
+        lista = lista.filter((m) => m.id_inventario === Number(params.id_inventario));
+      if (params.estado)
+        lista = lista.filter(
+          (m) =>
+            m.estado === params.estado ||
+            (params.estado === 'COMPLETADO' && m.estado === 'CONFIRMADO'),
+        );
       lista.sort((a, b) => b.fecha.localeCompare(a.fecha));
       return paginar(lista, { page_size: 20, ...params });
     },
@@ -97,12 +171,18 @@ export const rutasInventario: RutaMock[] = [
       const cantidad = Number(body?.cantidad ?? 0);
       const tipo = String(body?.tipo ?? '') as MovimientoInventario['tipo'];
 
-      if (!cantidad || cantidad <= 0) invalido('La cantidad debe ser mayor a cero.');
+      if (!Number.isInteger(cantidad) || cantidad < (tipo === TipoMovimiento.AJUSTE ? 0 : 1))
+        invalido('La cantidad no es valida.');
       if (!(tipo in AFECTA_FISICO)) invalido('El tipo de movimiento no es valido.');
 
       const inv = inventario.find((i) => i.id_inventario === idInventario);
       if (!inv) noEncontrado('registro de inventario');
 
+      if (
+        tipo === TipoMovimiento.AJUSTE &&
+        (cantidad < inv.cantidad_reservada || cantidad === inv.cantidad_fisica)
+      )
+        invalido('El stock final debe cambiar y no ser menor al reservado.');
       const signo = AFECTA_FISICO[tipo];
       const delta = tipo === TipoMovimiento.AJUSTE ? Number(body?.cantidad) : signo * cantidad;
 

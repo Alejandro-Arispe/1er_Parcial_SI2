@@ -49,11 +49,11 @@ export class UpdateProductDto {
 
   @IsOptional()
   @IsDateString()
-  promotionStart?: string;
+  promotionStart?: string | null;
 
   @IsOptional()
   @IsDateString()
-  promotionEnd?: string;
+  promotionEnd?: string | null;
 
   @IsOptional()
   @Type(() => Number)

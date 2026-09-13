@@ -3,41 +3,21 @@
  *
  *   UI -> hook -> service -> api (este archivo) -> NestJS | mock
  *
- * Mientras VITE_USE_MOCKS sea "true" las peticiones se resuelven con el mock
- * local. Al apagar la bandera, la misma llamada sale por axios hacia NestJS
- * sin tocar servicios ni componentes.
+ * Normaliza el envoltorio NestJS; cada servicio adapta su propio dominio.
  */
 import axios, { AxiosError, type AxiosRequestConfig } from 'axios';
 import { ErrorApi } from '../types/api';
-import { mockRequest } from '../mocks';
-
-export const USAR_MOCKS = import.meta.env.VITE_USE_MOCKS !== 'false';
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
-const CLAVE_TOKEN = 'fashionstore.token';
+import { BASE_URL, USAR_MOCKS } from './config';
+import { desenvolverRespuesta, type RespuestaBackend } from './contratos';
+import { endpoints } from './endpoints';
+import { guardarToken, obtenerToken, revisionSesion } from './sesion';
+export { USAR_MOCKS } from './config';
+export { guardarToken, obtenerToken } from './sesion';
 
 export const instancia = axios.create({
   baseURL: BASE_URL,
   timeout: 15000,
   headers: { 'Content-Type': 'application/json' },
-});
-
-/* --- token --- */
-
-let tokenEnMemoria: string | null = localStorage.getItem(CLAVE_TOKEN);
-
-export function guardarToken(token: string | null): void {
-  tokenEnMemoria = token;
-  if (token) localStorage.setItem(CLAVE_TOKEN, token);
-  else localStorage.removeItem(CLAVE_TOKEN);
-}
-
-export function obtenerToken(): string | null {
-  return tokenEnMemoria;
-}
-
-instancia.interceptors.request.use((config) => {
-  if (tokenEnMemoria) config.headers.Authorization = `Bearer ${tokenEnMemoria}`;
-  return config;
 });
 
 /* --- normalizacion de errores --- */
@@ -52,6 +32,49 @@ const MENSAJES: Record<number, string> = {
   500: 'Ocurrio un problema en el servidor. Intenta nuevamente en unos minutos.',
 };
 
+const TRADUCCIONES: Record<string, string> = {
+  'approximateTime must be in the future': 'La visita debe tener una fecha y hora futura.',
+  'The reservation is already closed': 'La reserva ya esta cerrada. Actualiza la lista.',
+  'The branch must close the reservation once the customer is present':
+    'La sucursal debe cerrar la reserva cuando el cliente ya esta presente.',
+  'The reservation expired and its stock was released':
+    'La reserva vencio y las prendas ya fueron liberadas.',
+  'Stock or reservation changed concurrently; retry the operation':
+    'El stock o la reserva cambiaron durante la operacion. Revisa los datos y vuelve a intentarlo.',
+  'You can only consult your assigned branch':
+    'Solo puedes consultar las reservas de tu sucursal asignada.',
+  'You can only manage your assigned branch':
+    'Solo puedes atender reservas de tu sucursal asignada.',
+
+  'No active branch has enough available stock for this variant':
+    'Ninguna sucursal tiene suficientes unidades de esta variante. Revisa la cantidad.',
+  'Product or variant is no longer available':
+    'La prenda o la combinacion de talla y color ya no esta disponible.',
+  'Quantity per variant must be between 1 and 100':
+    'La cantidad por variante debe estar entre 1 y 100.',
+  'A cart can contain at most 50 variants':
+    'El carrito admite como maximo 50 variantes diferentes.',
+  'Cart changed concurrently; retry the operation':
+    'El carrito cambio durante la operacion. Revisa los datos y vuelve a intentarlo.',
+  'Inventory changed concurrently; retry the operation':
+    'El inventario cambio durante la operacion. Actualiza los datos y vuelve a intentarlo.',
+  'Physical quantity cannot be lower than reserved quantity':
+    'El stock fisico no puede ser menor que las unidades reservadas.',
+  'Movement changed concurrently or is no longer pending':
+    'La entrada ya fue procesada o cambio durante la operacion. Actualiza el historial.',
+  'Movement is not a pending stock entry':
+    'Este movimiento no es una entrada pendiente de recepcion.',
+  'You can only access your assigned branch':
+    'Solo puedes consultar el inventario de tu sucursal asignada.',
+  'You can only register movements in your assigned branch':
+    'Solo puedes registrar movimientos en tu sucursal asignada.',
+
+  'Invalid email or password': 'Correo o contrasena incorrectos.',
+  'Email is already registered': 'Ya existe una cuenta registrada con ese correo.',
+  Unauthorized: 'Tu sesion expiro. Vuelve a iniciar sesion.',
+  'User is inactive or no longer exists': 'Tu cuenta esta desactivada o ya no existe.',
+};
+
 function normalizarError(error: unknown): ErrorApi {
   if (error instanceof ErrorApi) return error;
 
@@ -62,11 +85,21 @@ function normalizarError(error: unknown): ErrorApi {
       return new ErrorApi('No pudimos conectar con el servidor. Verifica tu conexion.', 0);
     }
     const detalle = err.response.data?.message;
-    const mensaje =
-      (Array.isArray(detalle) ? detalle[0] : detalle) ??
-      MENSAJES[status] ??
-      'No pudimos completar la operacion.';
-    return new ErrorApi(mensaje, status);
+    const mensajes = (Array.isArray(detalle) ? detalle : detalle ? [detalle] : []).map(
+      (mensaje) =>
+        TRADUCCIONES[mensaje] ??
+        (mensaje.startsWith('Insufficient stock or invalid variant:')
+          ? 'Una prenda ya no esta disponible en la sucursal o no tiene suficientes unidades. Revisa la seleccion.'
+          : mensaje.startsWith('Invalid transition from ')
+            ? 'La reserva cambio de estado. Actualiza la lista antes de continuar.'
+            : mensaje),
+    );
+    return new ErrorApi(
+      mensajes[0] ?? MENSAJES[status] ?? 'No pudimos completar la operacion.',
+      status,
+      undefined,
+      mensajes,
+    );
   }
 
   return new ErrorApi('Ocurrio un error inesperado.', 0);
@@ -85,19 +118,32 @@ async function peticion<T>(
   datos?: unknown,
   config?: AxiosRequestConfig,
 ): Promise<T> {
+  const publica = url === endpoints.auth.login || url === endpoints.auth.registro;
+  const token = obtenerToken();
+  const revision = revisionSesion();
   try {
     if (USAR_MOCKS) {
+      const { mockRequest } = await import('../mocks');
       return await mockRequest<T>(metodo, url, datos, config?.params as ParamsConsulta);
     }
-    const respuesta = await instancia.request<T>({
+    const respuesta = await instancia.request<RespuestaBackend<T>>({
+      ...config,
       method: metodo,
       url,
       data: datos,
-      ...config,
+      headers: {
+        ...config?.headers,
+        ...(!publica && token ? { Authorization: `Bearer ${token}` } : {}),
+      },
     });
-    return respuesta.data;
+    return desenvolverRespuesta(respuesta.data);
   } catch (error) {
-    throw normalizarError(error);
+    const normalizado = normalizarError(error);
+    // Una respuesta de la cuenta anterior nunca debe cerrar la nueva sesion.
+    if (normalizado.status === 401 && !publica && token && revision === revisionSesion()) {
+      guardarToken(null);
+    }
+    throw normalizado;
   }
 }
 

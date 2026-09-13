@@ -19,11 +19,13 @@ export interface ParamsPaginacion {
 export class ErrorApi extends Error {
   readonly status: number;
   readonly detalles?: Record<string, string>;
+  readonly mensajes: string[];
 
-  constructor(mensaje: string, status = 0, detalles?: Record<string, string>) {
+  constructor(mensaje: string, status = 0, detalles?: Record<string, string>, mensajes: string[] = [mensaje]) {
     super(mensaje);
     this.name = 'ErrorApi';
     this.status = status;
     this.detalles = detalles;
+    this.mensajes = mensajes.length ? mensajes : [mensaje];
   }
 }

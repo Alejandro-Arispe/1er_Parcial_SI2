@@ -1,3 +1,5 @@
+import { useAuth } from '../../context/AuthContext';
+import { RolesUsuario } from './RolesUsuario';
 import { useEffect, useState } from 'react';
 import { BadgeActivo } from '../../components/ui/Badges';
 import { ErrorEstado, FilasSkeleton, Vacio } from '../../components/ui/Estados';
@@ -11,7 +13,13 @@ import {
   useSucursales,
   useUsuarios,
 } from '../../hooks/useOperaciones';
-import { email as validarEmail, hayErrores, requerido, type Errores } from '../../lib/validacion';
+import {
+  email as validarEmail,
+  hayErrores,
+  requerido,
+  passwordRegistro,
+  type Errores,
+} from '../../lib/validacion';
 import type { DatosUsuario } from '../../services/organizacion.service';
 import { fecha } from '../../lib/format';
 import { RolNombre, type Usuario } from '../../types/domain';
@@ -29,6 +37,8 @@ const VACIO: DatosUsuario = {
 };
 
 export default function PaginaUsuarios() {
+  const auth = useAuth();
+  const [usuarioRoles, setUsuarioRoles] = useState<number | null>(null);
   const [q, setQ] = useState('');
   const [idRol, setIdRol] = useState<number | ''>('');
   const [page, setPage] = useState(1);
@@ -43,7 +53,12 @@ export default function PaginaUsuarios() {
   const desactivar = useDesactivarUsuario();
   const toast = useToast();
 
-  const consulta = useUsuarios({ q: q || undefined, id_rol: idRol || undefined, page, page_size: 10 });
+  const consulta = useUsuarios({
+    q: q || undefined,
+    id_rol: idRol || undefined,
+    page,
+    page_size: 10,
+  });
 
   useEffect(() => {
     if (editando === undefined) return;
@@ -66,9 +81,19 @@ export default function PaginaUsuarios() {
     });
   }, [editando]);
 
-  const esCliente = roles.data
-    ?.filter((r) => datos.id_roles.includes(r.id_rol))
-    .some((r) => r.nombre === RolNombre.CLIENTE);
+  const seleccionados = roles.data?.filter((r) => datos.id_roles.includes(r.id_rol)) ?? [];
+  const esCliente = editando
+    ? Boolean(editando.id_cliente)
+    : seleccionados.some((r) => r.nombre === RolNombre.CLIENTE);
+  const esEmpleado = editando
+    ? Boolean(editando.id_empleado)
+    : seleccionados.some(
+        (r) => r.nombre === RolNombre.CAJERO || r.nombre === RolNombre.ENCARGADO_SUCURSAL,
+      );
+  const dependenciasPendientes =
+    roles.isPending ||
+    roles.isError ||
+    (esEmpleado && (sucursales.isPending || sucursales.isError));
 
   function alternarRol(id: number) {
     setDatos((d) => ({
@@ -79,18 +104,29 @@ export default function PaginaUsuarios() {
 
   async function enviar() {
     const nuevos: Errores<DatosUsuario> = {
-      nombre: requerido(datos.nombre, 'El nombre es obligatorio'),
+      nombre:
+        datos.nombre.trim().length < 2 || datos.nombre.trim().length > 120
+          ? 'Usa entre 2 y 120 caracteres'
+          : undefined,
       email: validarEmail(datos.email),
       id_roles: requerido(datos.id_roles, 'Asigna al menos un rol'),
-      password: !editando ? requerido(datos.password, 'Define una contrasena inicial') : undefined,
+      password: !editando || datos.password ? passwordRegistro(datos.password ?? '') : undefined,
+      id_sucursal:
+        esEmpleado && !sucursales.data?.some((s) => s.id_sucursal === datos.id_sucursal)
+          ? 'Selecciona una sucursal activa'
+          : undefined,
     };
     setErrores(nuevos);
-    if (hayErrores(nuevos)) return;
+    if (hayErrores(nuevos) || dependenciasPendientes) return;
 
     try {
       await guardar.mutateAsync({ id: editando?.id_usuario, datos });
       toast.exito(editando ? 'Usuario actualizado.' : 'Usuario creado.');
       setEditando(undefined);
+      if (editando?.id_usuario === auth.usuario?.id_usuario) {
+        if (!datos.activo) await auth.cerrarSesion();
+        else auth.reintentarSesion();
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No pudimos guardar el usuario.');
     }
@@ -101,6 +137,7 @@ export default function PaginaUsuarios() {
     try {
       await desactivar.mutateAsync(porDesactivar.id_usuario);
       toast.exito('Usuario desactivado.');
+      if (porDesactivar.id_usuario === auth.usuario?.id_usuario) await auth.cerrarSesion();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No pudimos desactivar el usuario.');
     } finally {
@@ -158,7 +195,9 @@ export default function PaginaUsuarios() {
         </div>
 
         {consulta.isPending && <FilasSkeleton />}
-        {consulta.isError && <ErrorEstado error={consulta.error} onReintentar={() => consulta.refetch()} />}
+        {consulta.isError && (
+          <ErrorEstado error={consulta.error} onReintentar={() => consulta.refetch()} />
+        )}
         {consulta.data && consulta.data.items.length === 0 && (
           <Vacio titulo="Sin usuarios" mensaje="No hay usuarios que coincidan con el filtro." />
         )}
@@ -203,6 +242,13 @@ export default function PaginaUsuarios() {
                         >
                           Editar
                         </button>
+                        <button
+                          type="button"
+                          className="fs-btn fs-btn--contorno fs-btn--s"
+                          onClick={() => setUsuarioRoles(u.id_usuario)}
+                        >
+                          Roles
+                        </button>
                         {u.activo && (
                           <button
                             type="button"
@@ -235,21 +281,38 @@ export default function PaginaUsuarios() {
         ancho
         pie={
           <>
-            <button type="button" className="fs-btn fs-btn--contorno" onClick={() => setEditando(undefined)}>
+            <button
+              type="button"
+              className="fs-btn fs-btn--contorno"
+              onClick={() => setEditando(undefined)}
+            >
               Cancelar
             </button>
-            <button type="button" className="fs-btn fs-btn--acento" onClick={enviar} disabled={guardar.isPending}>
+            <button
+              type="button"
+              className="fs-btn fs-btn--acento"
+              onClick={enviar}
+              disabled={guardar.isPending || dependenciasPendientes}
+            >
               {guardar.isPending ? 'Guardando...' : 'Guardar'}
             </button>
           </>
         }
       >
         <div className="fs-pila">
+          {roles.isPending && <p>Cargando roles...</p>}
+          {roles.isError && (
+            <ErrorEstado error={roles.error} onReintentar={() => roles.refetch()} />
+          )}
+          {esEmpleado && sucursales.isError && (
+            <ErrorEstado error={sucursales.error} onReintentar={() => sucursales.refetch()} />
+          )}
           <div className="fs-rejilla-form">
             <div className="fs-campo">
               <label htmlFor="nombre-usuario">Nombre completo</label>
               <input
                 id="nombre-usuario"
+                maxLength={120}
                 className={`fs-input${errores.nombre ? ' fs-input--error' : ''}`}
                 value={datos.nombre}
                 onChange={(e) => setDatos({ ...datos, nombre: e.target.value })}
@@ -260,6 +323,7 @@ export default function PaginaUsuarios() {
               <label htmlFor="email-usuario">Correo</label>
               <input
                 id="email-usuario"
+                maxLength={180}
                 type="email"
                 className={`fs-input${errores.email ? ' fs-input--error' : ''}`}
                 value={datos.email}
@@ -273,6 +337,7 @@ export default function PaginaUsuarios() {
               </label>
               <input
                 id="password-usuario"
+                maxLength={72}
                 type="password"
                 className={`fs-input${errores.password ? ' fs-input--error' : ''}`}
                 value={datos.password}
@@ -290,21 +355,28 @@ export default function PaginaUsuarios() {
                   key={r.id_rol}
                   type="button"
                   className={`fs-chip${datos.id_roles.includes(r.id_rol) ? ' fs-chip--activo' : ''}`}
+                  disabled={Boolean(editando)}
                   onClick={() => alternarRol(r.id_rol)}
                 >
                   {String(r.nombre)}
                 </button>
               ))}
             </div>
+            {editando && (
+              <span className="fs-campo-ayuda">
+                Usa el boton Roles de la tabla para asignar o quitar permisos.
+              </span>
+            )}
             {errores.id_roles && <span className="fs-campo-error">{errores.id_roles}</span>}
           </div>
 
-          {esCliente ? (
+          {esCliente && (
             <div className="fs-rejilla-form">
               <div className="fs-campo">
                 <label htmlFor="telefono-usuario">Telefono</label>
                 <input
                   id="telefono-usuario"
+                  maxLength={30}
                   className="fs-input"
                   value={datos.telefono}
                   onChange={(e) => setDatos({ ...datos, telefono: e.target.value })}
@@ -314,18 +386,21 @@ export default function PaginaUsuarios() {
                 <label htmlFor="direccion-usuario">Direccion</label>
                 <input
                   id="direccion-usuario"
+                  maxLength={250}
                   className="fs-input"
                   value={datos.direccion}
                   onChange={(e) => setDatos({ ...datos, direccion: e.target.value })}
                 />
               </div>
             </div>
-          ) : (
+          )}
+          {esEmpleado && (
             <div className="fs-rejilla-form">
               <div className="fs-campo">
                 <label htmlFor="cargo-usuario">Cargo</label>
                 <input
                   id="cargo-usuario"
+                  maxLength={80}
                   className="fs-input"
                   value={datos.cargo}
                   onChange={(e) => setDatos({ ...datos, cargo: e.target.value })}
@@ -338,7 +413,10 @@ export default function PaginaUsuarios() {
                   className="fs-select"
                   value={datos.id_sucursal ?? ''}
                   onChange={(e) =>
-                    setDatos({ ...datos, id_sucursal: e.target.value ? Number(e.target.value) : null })
+                    setDatos({
+                      ...datos,
+                      id_sucursal: e.target.value ? Number(e.target.value) : null,
+                    })
                   }
                 >
                   <option value="">Sin sucursal</option>
@@ -348,6 +426,9 @@ export default function PaginaUsuarios() {
                     </option>
                   ))}
                 </select>
+                {errores.id_sucursal && (
+                  <span className="fs-campo-error">{errores.id_sucursal}</span>
+                )}
               </div>
             </div>
           )}
@@ -362,6 +443,10 @@ export default function PaginaUsuarios() {
           </label>
         </div>
       </Modal>
+
+      {usuarioRoles !== null && (
+        <RolesUsuario id={usuarioRoles} onCerrar={() => setUsuarioRoles(null)} />
+      )}
 
       <Confirmacion
         abierto={porDesactivar !== null}

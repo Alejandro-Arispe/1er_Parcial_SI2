@@ -9,6 +9,7 @@ import { ErrorEstado, FilasSkeleton, Vacio } from '../../components/ui/Estados';
 import { Confirmacion, Modal } from '../../components/ui/Modal';
 import { useToast } from '../../context/ToastContext';
 import { hayErrores, requerido, type Errores } from '../../lib/validacion';
+import { invalidarCatalogo } from '../../hooks/invalidarCatalogo';
 
 export interface ColumnaCrud<T> {
   titulo: string;
@@ -23,6 +24,9 @@ export interface CampoCrud<T> {
   opciones?: Array<{ valor: string | number; texto: string }>;
   requerido?: boolean;
   ayuda?: string;
+  soloEdicion?: boolean;
+  minLength?: number;
+  maxLength?: number;
 }
 
 interface Props<T> {
@@ -38,9 +42,13 @@ interface Props<T> {
   campos: Array<CampoCrud<T>>;
   nuevo: Partial<T>;
   nombreSingular: string;
+  bajaLogica?: (item: T) => boolean;
+  validar?: (datos: Partial<T>) => Errores<T>;
+  bloquearFormulario?: boolean;
+  estadoDependencias?: ReactNode;
 }
 
-export function CrudSimple<T extends Record<string, any>>({
+export function CrudSimple<T extends object>({
   titulo,
   descripcion,
   claveCache,
@@ -53,23 +61,27 @@ export function CrudSimple<T extends Record<string, any>>({
   campos,
   nuevo,
   nombreSingular,
+  bajaLogica,
+  validar,
+  bloquearFormulario,
+  estadoDependencias,
 }: Props<T>) {
   const qc = useQueryClient();
   const toast = useToast();
   const consulta = useQuery({ queryKey: claveCache, queryFn: cargar });
 
   const [editando, setEditando] = useState<Partial<T> | null>(null);
+  const [idEditando, setIdEditando] = useState<number | null>(null);
   const [errores, setErrores] = useState<Errores<T>>({});
   const [porEliminar, setPorEliminar] = useState<T | null>(null);
 
   const guardar = useMutation({
     mutationFn: async (datos: Partial<T>) => {
-      const id = (datos as any).__id as number | undefined;
-      const { __id, ...limpio } = datos as any;
-      return id ? actualizar(id, limpio) : crear(limpio);
+      return idEditando !== null ? actualizar(idEditando, datos) : crear(datos);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: claveCache });
+      void invalidarCatalogo(qc);
       toast.exito(`${nombreSingular} guardado correctamente.`);
       setEditando(null);
     },
@@ -80,7 +92,8 @@ export function CrudSimple<T extends Record<string, any>>({
     mutationFn: (id: number) => eliminar!(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: claveCache });
-      toast.exito(`${nombreSingular} eliminado.`);
+      void invalidarCatalogo(qc);
+      toast.exito(`${nombreSingular} ${bajaLogica ? 'desactivado' : 'eliminado'}.`);
       setPorEliminar(null);
     },
     onError: (error) => {
@@ -91,23 +104,34 @@ export function CrudSimple<T extends Record<string, any>>({
 
   function abrirNuevo() {
     setErrores({});
+    setIdEditando(null);
     setEditando({ ...nuevo });
   }
 
   function abrirEdicion(item: T) {
     setErrores({});
-    setEditando({ ...item, __id: idDe(item) } as any);
+    setIdEditando(idDe(item));
+    setEditando({ ...item });
   }
 
   function enviar() {
-    if (!editando) return;
+    if (!editando || bloquearFormulario) return;
     const nuevos: Errores<T> = {};
     for (const campo of campos) {
+      if (campo.soloEdicion && idEditando === null) continue;
       if (campo.requerido) {
         const error = requerido(editando[campo.clave]);
         if (error) nuevos[campo.clave] = error;
       }
+      const valor = editando[campo.clave];
+      if (typeof valor === 'string' && valor.trim()) {
+        if (campo.minLength && valor.trim().length < campo.minLength)
+          nuevos[campo.clave] = `Usa al menos ${campo.minLength} caracteres`;
+        if (campo.maxLength && valor.length > campo.maxLength)
+          nuevos[campo.clave] = `Usa como maximo ${campo.maxLength} caracteres`;
+      }
     }
+    Object.assign(nuevos, validar?.(editando));
     setErrores(nuevos);
     if (hayErrores(nuevos)) return;
     guardar.mutate(editando);
@@ -132,7 +156,9 @@ export function CrudSimple<T extends Record<string, any>>({
 
       <section className="fs-tarjeta fs-tarjeta--pad">
         {consulta.isPending && <FilasSkeleton />}
-        {consulta.isError && <ErrorEstado error={consulta.error} onReintentar={() => consulta.refetch()} />}
+        {consulta.isError && (
+          <ErrorEstado error={consulta.error} onReintentar={() => consulta.refetch()} />
+        )}
 
         {consulta.data && consulta.data.length === 0 && (
           <Vacio
@@ -175,13 +201,13 @@ export function CrudSimple<T extends Record<string, any>>({
                       >
                         Editar
                       </button>
-                      {eliminar && (
+                      {eliminar && (!bajaLogica || bajaLogica(item)) && (
                         <button
                           type="button"
                           className="fs-btn fs-btn--fantasma fs-btn--s"
                           onClick={() => setPorEliminar(item)}
                         >
-                          Eliminar
+                          {bajaLogica ? 'Desactivar' : 'Eliminar'}
                         </button>
                       )}
                     </td>
@@ -195,86 +221,123 @@ export function CrudSimple<T extends Record<string, any>>({
 
       <Modal
         abierto={editando !== null}
-        titulo={(editando as any)?.__id ? `Editar ${nombreSingular.toLowerCase()}` : `Agregar ${nombreSingular.toLowerCase()}`}
+        titulo={
+          idEditando !== null
+            ? `Editar ${nombreSingular.toLowerCase()}`
+            : `Agregar ${nombreSingular.toLowerCase()}`
+        }
         onCerrar={() => setEditando(null)}
         pie={
           <>
-            <button type="button" className="fs-btn fs-btn--contorno" onClick={() => setEditando(null)}>
+            <button
+              type="button"
+              className="fs-btn fs-btn--contorno"
+              onClick={() => setEditando(null)}
+            >
               Cancelar
             </button>
-            <button type="button" className="fs-btn fs-btn--acento" onClick={enviar} disabled={guardar.isPending}>
+            <button
+              type="button"
+              className="fs-btn fs-btn--acento"
+              onClick={enviar}
+              disabled={guardar.isPending || bloquearFormulario}
+            >
               {guardar.isPending ? 'Guardando...' : 'Guardar'}
             </button>
           </>
         }
       >
+        {estadoDependencias}
         <div className="fs-rejilla-form">
-          {campos.map((campo) => {
-            const valor = editando?.[campo.clave];
-            const error = errores[campo.clave];
-            return (
-              <div className="fs-campo" key={campo.clave}>
-                {campo.tipo === 'checkbox' ? (
-                  <label className="fs-check">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(valor)}
-                      onChange={(e) => cambiar(campo.clave, e.target.checked)}
-                    />
-                    {campo.etiqueta}
-                  </label>
-                ) : (
-                  <>
-                    <label htmlFor={campo.clave}>{campo.etiqueta}</label>
-                    {campo.tipo === 'select' ? (
-                      <select
-                        id={campo.clave}
-                        className={`fs-select${error ? ' fs-select--error' : ''}`}
-                        value={(valor as string) ?? ''}
-                        onChange={(e) =>
-                          cambiar(campo.clave, e.target.value === '' ? null : Number(e.target.value))
-                        }
-                      >
-                        <option value="">Sin asignar</option>
-                        {campo.opciones?.map((o) => (
-                          <option key={o.valor} value={o.valor}>
-                            {o.texto}
-                          </option>
-                        ))}
-                      </select>
-                    ) : campo.tipo === 'textarea' ? (
-                      <textarea
-                        id={campo.clave}
-                        className="fs-textarea"
-                        value={(valor as string) ?? ''}
-                        onChange={(e) => cambiar(campo.clave, e.target.value)}
-                      />
-                    ) : (
+          {campos
+            .filter((campo) => !campo.soloEdicion || idEditando !== null)
+            .map((campo) => {
+              const valor = editando?.[campo.clave];
+              const error = errores[campo.clave];
+              return (
+                <div className="fs-campo" key={campo.clave}>
+                  {campo.tipo === 'checkbox' ? (
+                    <label className="fs-check">
                       <input
-                        id={campo.clave}
-                        type={campo.tipo === 'numero' ? 'number' : campo.tipo === 'fecha' ? 'date' : campo.tipo === 'color' ? 'color' : 'text'}
-                        className={`fs-input${error ? ' fs-input--error' : ''}`}
-                        value={(valor as string) ?? ''}
-                        onChange={(e) =>
-                          cambiar(campo.clave, campo.tipo === 'numero' ? Number(e.target.value) : e.target.value)
-                        }
+                        type="checkbox"
+                        checked={Boolean(valor)}
+                        onChange={(e) => cambiar(campo.clave, e.target.checked)}
                       />
-                    )}
-                  </>
-                )}
-                {campo.ayuda && <span className="fs-campo-ayuda">{campo.ayuda}</span>}
-                {error && <span className="fs-campo-error">{error}</span>}
-              </div>
-            );
-          })}
+                      {campo.etiqueta}
+                    </label>
+                  ) : (
+                    <>
+                      <label htmlFor={campo.clave}>{campo.etiqueta}</label>
+                      {campo.tipo === 'select' ? (
+                        <select
+                          id={campo.clave}
+                          className={`fs-select${error ? ' fs-select--error' : ''}`}
+                          value={(valor as string) ?? ''}
+                          onChange={(e) =>
+                            cambiar(
+                              campo.clave,
+                              e.target.value === '' ? null : Number(e.target.value),
+                            )
+                          }
+                        >
+                          <option value="">Sin asignar</option>
+                          {campo.opciones?.map((o) => (
+                            <option key={o.valor} value={o.valor}>
+                              {o.texto}
+                            </option>
+                          ))}
+                        </select>
+                      ) : campo.tipo === 'textarea' ? (
+                        <textarea
+                          maxLength={campo.maxLength}
+                          id={campo.clave}
+                          className="fs-textarea"
+                          value={(valor as string) ?? ''}
+                          onChange={(e) => cambiar(campo.clave, e.target.value)}
+                        />
+                      ) : (
+                        <input
+                          minLength={campo.minLength}
+                          maxLength={campo.maxLength}
+                          id={campo.clave}
+                          type={
+                            campo.tipo === 'numero'
+                              ? 'number'
+                              : campo.tipo === 'fecha'
+                                ? 'date'
+                                : campo.tipo === 'color'
+                                  ? 'color'
+                                  : 'text'
+                          }
+                          className={`fs-input${error ? ' fs-input--error' : ''}`}
+                          value={(valor as string) ?? ''}
+                          onChange={(e) =>
+                            cambiar(
+                              campo.clave,
+                              campo.tipo === 'numero' ? Number(e.target.value) : e.target.value,
+                            )
+                          }
+                        />
+                      )}
+                    </>
+                  )}
+                  {campo.ayuda && <span className="fs-campo-ayuda">{campo.ayuda}</span>}
+                  {error && <span className="fs-campo-error">{error}</span>}
+                </div>
+              );
+            })}
         </div>
       </Modal>
 
       <Confirmacion
         abierto={porEliminar !== null}
-        titulo={`Eliminar ${nombreSingular.toLowerCase()}`}
-        mensaje="Esta accion no se puede deshacer. Quieres continuar?"
-        textoConfirmar="Eliminar"
+        titulo={`${bajaLogica ? 'Desactivar' : 'Eliminar'} ${nombreSingular.toLowerCase()}`}
+        mensaje={
+          bajaLogica
+            ? 'El registro se conserva y podras reactivarlo desde Editar.'
+            : 'Se eliminara el registro si no tiene referencias. Quieres continuar?'
+        }
+        textoConfirmar={bajaLogica ? 'Desactivar' : 'Eliminar'}
         peligro
         cargando={borrar.isPending}
         onConfirmar={() => porEliminar && borrar.mutate(idDe(porEliminar))}

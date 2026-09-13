@@ -1,9 +1,12 @@
+import { USAR_MOCKS } from '../api/config';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   inventarioService,
   type ConsultaDisponibilidad,
   type DatosMovimiento,
   type FiltrosInventario,
+  type FiltrosMovimiento,
+  type DatosEntrada,
 } from '../services/inventario.service';
 import {
   proveedoresService,
@@ -37,10 +40,11 @@ export function useDisponibilidad(consulta: ConsultaDisponibilidad | null) {
   });
 }
 
-export function useMovimientos(filtros: { id_sucursal?: number; tipo?: string; page?: number } = {}) {
+export function useMovimientos(filtros: FiltrosMovimiento) {
   return useQuery({
     queryKey: claves.movimientos(filtros),
     queryFn: () => inventarioService.movimientos(filtros),
+    enabled: USAR_MOCKS || Boolean(filtros.id_inventario),
   });
 }
 
@@ -52,8 +56,40 @@ export function useRegistrarMovimiento() {
       qc.invalidateQueries({ queryKey: ['inventario'] });
       qc.invalidateQueries({ queryKey: ['movimientos'] });
       qc.invalidateQueries({ queryKey: ['reportes'] });
+      qc.invalidateQueries({ queryKey: ['disponibilidad'] });
+      qc.invalidateQueries({ queryKey: ['productos'] });
+      qc.invalidateQueries({ queryKey: ['carrito'] });
     },
   });
+}
+
+export function useRegistroInventario(id: number) {
+  return useQuery({
+    queryKey: ['inventario', 'detalle', id],
+    queryFn: () => inventarioService.obtener(id),
+    enabled: id > 0,
+  });
+}
+export function useEntradaInventario() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (datos: DatosEntrada) => inventarioService.registrarEntrada(datos),
+    onSuccess: () => invalidarStock(qc),
+  });
+}
+export function useCompletarEntrada() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => inventarioService.completarEntrada(id),
+    onSuccess: () => invalidarStock(qc),
+  });
+}
+function invalidarStock(qc: ReturnType<typeof useQueryClient>) {
+  return Promise.all(
+    ['inventario', 'movimientos', 'disponibilidad', 'productos', 'carrito', 'reportes'].map((key) =>
+      qc.invalidateQueries({ queryKey: [key] }),
+    ),
+  );
 }
 
 /* ---------------- organizacion ---------------- */
@@ -144,7 +180,9 @@ export function useTopProductos(filtros: FiltroReporte & { limite?: number } = {
   });
 }
 
-export function useInventarioCritico(filtros: FiltroReporte & { umbral?: number; limite?: number } = {}) {
+export function useInventarioCritico(
+  filtros: FiltroReporte & { umbral?: number; limite?: number } = {},
+) {
   return useQuery({
     queryKey: claves.reportes('critico', filtros),
     queryFn: () => reportesService.inventarioCritico(filtros),
@@ -160,11 +198,14 @@ export function useReservasPorEstado(filtros: FiltroReporte = {}) {
 
 /* ---------------- IA ---------------- */
 
-export function useRecomendaciones(opciones: { limite?: number; contexto?: string } = {}, habilitado = true) {
+export function useRecomendaciones(
+  opciones: { limite?: number; contexto?: string } = {},
+  habilitado = true,
+) {
   return useQuery({
     queryKey: claves.recomendaciones(opciones),
     queryFn: () => iaService.recomendaciones(opciones),
-    enabled: habilitado,
+    enabled: habilitado && USAR_MOCKS,
     staleTime: 5 * 60 * 1000,
   });
 }

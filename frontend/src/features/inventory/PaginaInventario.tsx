@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+import { ModalEntrada } from './ModalEntrada';
 import { useState } from 'react';
 import { BadgeStock } from '../../components/ui/Badges';
 import { ErrorEstado, FilasSkeleton, Vacio } from '../../components/ui/Estados';
@@ -12,8 +14,11 @@ export default function PaginaInventario() {
   const { idSucursal, tieneRol } = useAuth();
   const esAdmin = tieneRol('ADMINISTRADOR');
 
+  const [entrada, setEntrada] = useState(false);
   const [q, setQ] = useState('');
-  const [sucursalFiltro, setSucursalFiltro] = useState<number | ''>(esAdmin ? '' : (idSucursal ?? ''));
+  const [sucursalFiltro, setSucursalFiltro] = useState<number | ''>(
+    esAdmin ? '' : (idSucursal ?? ''),
+  );
   const [soloCriticos, setSoloCriticos] = useState(false);
   const [page, setPage] = useState(1);
   const [seleccionado, setSeleccionado] = useState<Inventario | null>(null);
@@ -21,7 +26,7 @@ export default function PaginaInventario() {
   const sucursales = useSucursales();
   const consulta = useInventario({
     q: q || undefined,
-    id_sucursal: sucursalFiltro || undefined,
+    id_sucursal: esAdmin ? sucursalFiltro || undefined : idSucursal || undefined,
     solo_criticos: soloCriticos || undefined,
     page,
     page_size: 15,
@@ -37,6 +42,9 @@ export default function PaginaInventario() {
             Existencias por producto, talla, color y sucursal. Disponible = fisico - reservado.
           </p>
         </div>
+        <button type="button" className="fs-btn fs-btn--acento" onClick={() => setEntrada(true)}>
+          Entrada de mercaderia
+        </button>
       </header>
 
       <section className="fs-tarjeta fs-tarjeta--pad fs-pila">
@@ -86,14 +94,19 @@ export default function PaginaInventario() {
                 setPage(1);
               }}
             />
-            Solo stock critico
+            Solo stock critico (3 o menos)
           </label>
         </div>
 
         {consulta.isPending && <FilasSkeleton filas={6} />}
-        {consulta.isError && <ErrorEstado error={consulta.error} onReintentar={() => consulta.refetch()} />}
+        {consulta.isError && (
+          <ErrorEstado error={consulta.error} onReintentar={() => consulta.refetch()} />
+        )}
         {consulta.data && consulta.data.items.length === 0 && (
-          <Vacio titulo="Sin registros" mensaje="No hay inventario que coincida con los filtros aplicados." />
+          <Vacio
+            titulo="Sin registros"
+            mensaje="No hay inventario que coincida con los filtros aplicados."
+          />
         )}
 
         {consulta.data && consulta.data.items.length > 0 && (
@@ -119,7 +132,10 @@ export default function PaginaInventario() {
                       <td>{i.talla?.nombre}</td>
                       <td>
                         <span className="fs-fila" style={{ gap: 6 }}>
-                          <span className="fs-punto-color" style={{ background: i.color?.codigo_hex }} />
+                          <span
+                            className="fs-punto-color"
+                            style={{ background: i.color?.codigo_hex }}
+                          />
                           {i.color?.nombre}
                         </span>
                       </td>
@@ -137,6 +153,12 @@ export default function PaginaInventario() {
                         >
                           Registrar movimiento
                         </button>
+                        <Link
+                          className="fs-btn fs-btn--contorno fs-btn--s"
+                          to={`${esAdmin ? '/admin' : '/sucursal'}/movimientos?id_inventario=${i.id_inventario}`}
+                        >
+                          Movimientos
+                        </Link>
                       </td>
                     </tr>
                   ))}
@@ -153,6 +175,7 @@ export default function PaginaInventario() {
         )}
       </section>
 
+      {entrada && <ModalEntrada onCerrar={() => setEntrada(false)} />}
       <ModalMovimiento inventario={seleccionado} onCerrar={() => setSeleccionado(null)} />
     </>
   );

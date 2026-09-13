@@ -1,3 +1,4 @@
+import { invalidarCatalogo } from './invalidarCatalogo';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   catalogoService,
@@ -76,12 +77,14 @@ export function useColecciones() {
 export function useGuardarProducto() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, datos }: { id?: number; datos: DatosProducto }) =>
-      id ? catalogoService.actualizarProducto(id, datos) : catalogoService.crearProducto(datos),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['productos'] });
-      qc.invalidateQueries({ queryKey: ['producto'] });
-    },
+    mutationFn: (
+      entrada:
+        { id: number; datos: Partial<DatosProducto> } | { id?: undefined; datos: DatosProducto },
+    ) =>
+      entrada.id !== undefined
+        ? catalogoService.actualizarProducto(entrada.id, entrada.datos)
+        : catalogoService.crearProducto(entrada.datos),
+    onSuccess: () => invalidarCatalogo(qc),
   });
 }
 
@@ -89,6 +92,6 @@ export function useDesactivarProducto() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => catalogoService.desactivarProducto(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['productos'] }),
+    onSuccess: () => invalidarCatalogo(qc),
   });
 }

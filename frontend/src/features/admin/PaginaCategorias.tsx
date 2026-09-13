@@ -21,7 +21,7 @@ export default function PaginaCategorias() {
         { titulo: 'Descripcion', render: (c) => <span className="fs-sub">{c.descripcion}</span> },
       ]}
       campos={[
-        { clave: 'nombre', etiqueta: 'Nombre', requerido: true },
+        { clave: 'nombre', etiqueta: 'Nombre', requerido: true, minLength: 2, maxLength: 100 },
         { clave: 'descripcion', etiqueta: 'Descripcion', tipo: 'textarea' },
       ]}
     />

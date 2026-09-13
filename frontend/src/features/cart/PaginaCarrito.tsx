@@ -1,3 +1,5 @@
+import { useIsMutating } from '@tanstack/react-query';
+import { USAR_MOCKS } from '../../api/config';
 import { Link, useNavigate } from 'react-router-dom';
 import { Cargando, ErrorEstado, Vacio } from '../../components/ui/Estados';
 import { ImagenProducto } from '../../components/ui/ImagenProducto';
@@ -13,6 +15,7 @@ import { subtotal } from '../../lib/domain';
 
 export default function PaginaCarrito() {
   const carrito = useCarrito();
+  const ocupado = useIsMutating({ mutationKey: ['carrito', 'cambio'] }) > 0;
   const cambiarCantidad = useCambiarCantidadCarrito();
   const quitar = useQuitarDelCarrito();
   const vaciar = useVaciarCarrito();
@@ -20,7 +23,8 @@ export default function PaginaCarrito() {
   const navegar = useNavigate();
 
   if (carrito.isPending) return <Cargando texto="Cargando tu carrito..." />;
-  if (carrito.isError) return <ErrorEstado error={carrito.error} onReintentar={() => carrito.refetch()} />;
+  if (carrito.isError)
+    return <ErrorEstado error={carrito.error} onReintentar={() => carrito.refetch()} />;
 
   if (carrito.detalles.length === 0) {
     return (
@@ -59,7 +63,7 @@ export default function PaginaCarrito() {
             type="button"
             className="fs-btn fs-btn--fantasma fs-btn--s"
             onClick={() => accion(vaciar.mutateAsync(), 'Carrito vaciado.')}
-            disabled={vaciar.isPending}
+            disabled={ocupado}
           >
             Vaciar carrito
           </button>
@@ -79,6 +83,33 @@ export default function PaginaCarrito() {
                 Talla {d.talla?.nombre} - {d.color?.nombre}
               </span>
               <span className="fs-sub">{moneda(d.precio_unitario)} c/u</span>
+              {d.precio_cambio && (
+                <p className="fs-alerta fs-alerta--info">
+                  El precio cambio de {moneda(d.precio_guardado ?? 0)} a {moneda(d.precio_unitario)}
+                  . El total usa el precio vigente.
+                </p>
+              )}
+              {d.problema && (
+                <p className="fs-alerta fs-alerta--error">
+                  {
+                    {
+                      PRODUCT_INACTIVE: 'Esta prenda ya no esta activa. Quitala del carrito.',
+                      VARIANT_UNAVAILABLE:
+                        'Esta combinacion de talla y color ya no esta disponible.',
+                      INSUFFICIENT_STOCK:
+                        'Ninguna sucursal tiene suficientes unidades. Reduce la cantidad o quita la prenda.',
+                    }[d.problema]
+                  }
+                </p>
+              )}
+              {d.disponibilidad && d.disponibilidad.length > 0 && (
+                <p className="fs-sub">
+                  Disponible por tienda:{' '}
+                  {d.disponibilidad
+                    .map((a) => `${a.sucursal.nombre}: ${a.cantidad_disponible}`)
+                    .join(' ? ')}
+                </p>
+              )}
 
               <div className="fs-fila" style={{ gap: 12 }}>
                 <div className="fs-cantidad">
@@ -86,11 +117,14 @@ export default function PaginaCarrito() {
                     type="button"
                     onClick={() =>
                       accion(
-                        cambiarCantidad.mutateAsync({ id: d.id_detalle_carrito, cantidad: d.cantidad - 1 }),
+                        cambiarCantidad.mutateAsync({
+                          id: d.id_detalle_carrito,
+                          cantidad: d.cantidad - 1,
+                        }),
                         'Cantidad actualizada.',
                       )
                     }
-                    disabled={d.cantidad <= 1 || cambiarCantidad.isPending}
+                    disabled={d.cantidad <= 1 || ocupado}
                   >
                     -
                   </button>
@@ -99,11 +133,23 @@ export default function PaginaCarrito() {
                     type="button"
                     onClick={() =>
                       accion(
-                        cambiarCantidad.mutateAsync({ id: d.id_detalle_carrito, cantidad: d.cantidad + 1 }),
+                        cambiarCantidad.mutateAsync({
+                          id: d.id_detalle_carrito,
+                          cantidad: d.cantidad + 1,
+                        }),
                         'Cantidad actualizada.',
                       )
                     }
-                    disabled={cambiarCantidad.isPending}
+                    disabled={
+                      ocupado ||
+                      d.cantidad >=
+                        Math.min(
+                          100,
+                          d.disponibilidad
+                            ? Math.max(0, ...d.disponibilidad.map((a) => a.cantidad_disponible))
+                            : 100,
+                        )
+                    }
                   >
                     +
                   </button>
@@ -111,21 +157,40 @@ export default function PaginaCarrito() {
                 <button
                   type="button"
                   className="fs-btn fs-btn--fantasma fs-btn--s"
-                  onClick={() => accion(quitar.mutateAsync(d.id_detalle_carrito), 'Prenda eliminada.')}
-                  disabled={quitar.isPending}
+                  onClick={() =>
+                    accion(quitar.mutateAsync(d.id_detalle_carrito), 'Prenda eliminada.')
+                  }
+                  disabled={ocupado}
                 >
                   Quitar
                 </button>
               </div>
             </div>
 
-            <strong className="fs-nums">{moneda(subtotal(d.cantidad, d.precio_unitario))}</strong>
+            <strong className="fs-nums">
+              {moneda(d.subtotal ?? subtotal(d.cantidad, d.precio_unitario))}
+            </strong>
           </article>
         ))}
       </section>
 
       <aside className="fs-panel fs-resumen">
         <h3>Resumen</h3>
+        <p className="fs-sub">
+          Agregar prendas al carrito no reserva existencias. Los precios y el stock se comprueban
+          nuevamente al comprar.
+        </p>
+        {carrito.data?.tiene_disponibilidad === false && (
+          <p className="fs-alerta fs-alerta--error">
+            No hay una sucursal que pueda atender todo el carrito. Revisa las prendas y cantidades.
+          </p>
+        )}
+        {carrito.data?.sucursales_disponibles && carrito.data.sucursales_disponibles.length > 0 && (
+          <p>
+            Sucursales que pueden atender el carrito:{' '}
+            {carrito.data.sucursales_disponibles.map((s) => s.nombre).join(', ')}.
+          </p>
+        )}
         <div className="fs-resumen__linea">
           <span>Prendas</span>
           <span className="fs-nums">{carrito.unidades}</span>
@@ -139,8 +204,13 @@ export default function PaginaCarrito() {
           <span>Total</span>
           <span className="fs-nums">{moneda(carrito.total)}</span>
         </div>
-        <button type="button" className="fs-btn fs-btn--acento fs-btn--bloque" onClick={() => navegar('/checkout')}>
-          Continuar con la compra
+        <button
+          type="button"
+          className="fs-btn fs-btn--acento fs-btn--bloque"
+          disabled={!USAR_MOCKS || ocupado || carrito.data?.tiene_disponibilidad === false}
+          onClick={() => navegar('/checkout')}
+        >
+          {USAR_MOCKS ? 'Continuar con la compra' : 'Pago en linea proximamente'}
         </button>
         <Link to="/catalogo" className="fs-btn fs-btn--contorno fs-btn--bloque">
           Seguir comprando

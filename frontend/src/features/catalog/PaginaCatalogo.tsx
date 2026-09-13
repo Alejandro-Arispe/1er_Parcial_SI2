@@ -47,13 +47,26 @@ export default function PaginaCatalogo() {
     actualizar(clave, filtros[clave as keyof FiltrosProducto] === valor ? null : valor);
   }
 
-  const hayFiltros = ['id_categoria', 'id_talla', 'id_color', 'id_sucursal', 'solo_promocion', 'q'].some(
-    (c) => params.get(c),
-  );
+  const hayFiltros = [
+    'id_categoria',
+    'id_talla',
+    'id_color',
+    'id_sucursal',
+    'solo_promocion',
+    'q',
+  ].some((c) => params.get(c));
 
   return (
     <div className="fs-contenedor fs-catalogo">
       <aside className="fs-filtros">
+        {[categorias, tallas, colores, sucursales].some((q) => q.isPending) && (
+          <p>Cargando filtros...</p>
+        )}
+        {[categorias, tallas, colores, sucursales].map((q, i) =>
+          q.isError ? (
+            <ErrorEstado key={i} error={q.error} onReintentar={() => q.refetch()} />
+          ) : null,
+        )}
         <form
           className="fs-campo"
           onSubmit={(e) => {
@@ -148,7 +161,11 @@ export default function PaginaCatalogo() {
         </div>
 
         {hayFiltros && (
-          <button type="button" className="fs-btn fs-btn--contorno fs-btn--s" onClick={() => setParams({})}>
+          <button
+            type="button"
+            className="fs-btn fs-btn--contorno fs-btn--s"
+            onClick={() => setParams({})}
+          >
             Limpiar filtros
           </button>
         )}
@@ -159,9 +176,7 @@ export default function PaginaCatalogo() {
           <div>
             <p className="fs-eyebrow">Catalogo</p>
             <h1>Nueva coleccion</h1>
-            {consulta.data && (
-              <p className="fs-sub">{consulta.data.total} prendas encontradas</p>
-            )}
+            {consulta.data && <p className="fs-sub">{consulta.data.total} prendas encontradas</p>}
           </div>
           <div className="fs-campo" style={{ minWidth: 190 }}>
             <label htmlFor="orden">Ordenar por</label>
@@ -181,14 +196,20 @@ export default function PaginaCatalogo() {
         </div>
 
         {consulta.isPending && <RejillaSkeleton />}
-        {consulta.isError && <ErrorEstado error={consulta.error} onReintentar={() => consulta.refetch()} />}
+        {consulta.isError && (
+          <ErrorEstado error={consulta.error} onReintentar={() => consulta.refetch()} />
+        )}
 
         {consulta.data && consulta.data.items.length === 0 && (
           <Vacio
             titulo="No encontramos prendas"
             mensaje="Prueba con otra categoria, cambia la talla o limpia los filtros aplicados."
             accion={
-              <button type="button" className="fs-btn fs-btn--contorno" onClick={() => setParams({})}>
+              <button
+                type="button"
+                className="fs-btn fs-btn--contorno"
+                onClick={() => setParams({})}
+              >
                 Limpiar filtros
               </button>
             }
