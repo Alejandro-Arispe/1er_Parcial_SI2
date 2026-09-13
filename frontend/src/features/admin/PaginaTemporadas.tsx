@@ -17,6 +17,12 @@ export default function PaginaTemporadas() {
       actualizar={(id, datos) => catalogoService.actualizarTemporada(id, datos)}
       eliminar={(id) => catalogoService.eliminarTemporada(id)}
       idDe={(t) => t.id_temporada}
+      bajaLogica={(item) => item.activa}
+      validar={(d) =>
+        d.fecha_inicio && d.fecha_fin && d.fecha_fin < d.fecha_inicio
+          ? { fecha_fin: 'El fin debe ser igual o posterior al inicio' }
+          : {}
+      }
       nuevo={{ nombre: '', fecha_inicio: '', fecha_fin: '', activa: true }}
       columnas={[
         { titulo: 'Nombre', render: (t) => t.nombre },
@@ -25,10 +31,10 @@ export default function PaginaTemporadas() {
         { titulo: 'Estado', render: (t) => <BadgeActivo activo={t.activa} /> },
       ]}
       campos={[
-        { clave: 'nombre', etiqueta: 'Nombre', requerido: true },
+        { clave: 'nombre', etiqueta: 'Nombre', requerido: true, minLength: 2, maxLength: 120 },
         { clave: 'fecha_inicio', etiqueta: 'Fecha de inicio', tipo: 'fecha', requerido: true },
         { clave: 'fecha_fin', etiqueta: 'Fecha de fin', tipo: 'fecha', requerido: true },
-        { clave: 'activa', etiqueta: 'Temporada activa', tipo: 'checkbox' },
+        { clave: 'activa', etiqueta: 'Temporada activa', tipo: 'checkbox', soloEdicion: true },
       ]}
     />
   );

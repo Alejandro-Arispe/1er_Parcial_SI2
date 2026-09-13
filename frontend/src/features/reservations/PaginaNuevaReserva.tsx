@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { ErrorEstado } from '../../components/ui/Estados';
+import { Paginacion } from '../../components/ui/Paginacion';
+import { useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { BadgeStock } from '../../components/ui/Badges';
 import { ImagenProducto } from '../../components/ui/ImagenProducto';
@@ -28,10 +30,13 @@ function horarioPorDefecto(): string {
 export default function PaginaNuevaReserva() {
   const navegar = useNavigate();
   const toast = useToast();
-  const { autenticado, esCliente } = useAuth();
-  const preseleccion = (useLocation().state ?? null) as
-    | { id_producto: number; id_talla: number | null; id_color: number | null; cantidad?: number }
-    | null;
+  const { esCliente } = useAuth();
+  const preseleccion = (useLocation().state ?? null) as {
+    id_producto: number;
+    id_talla: number | null;
+    id_color: number | null;
+    cantidad?: number;
+  } | null;
 
   const sucursales = useSucursales();
   const crear = useCrearReserva();
@@ -43,13 +48,14 @@ export default function PaginaNuevaReserva() {
   const [error, setError] = useState('');
 
   // selector de prenda
+  const [paginaBusqueda, setPaginaBusqueda] = useState(1);
   const [busqueda, setBusqueda] = useState('');
   const [idProducto, setIdProducto] = useState<number | null>(preseleccion?.id_producto ?? null);
   const [idTalla, setIdTalla] = useState<number | null>(preseleccion?.id_talla ?? null);
   const [idColor, setIdColor] = useState<number | null>(preseleccion?.id_color ?? null);
   const [cantidad, setCantidad] = useState(preseleccion?.cantidad ?? 1);
 
-  const resultados = useProductos({ q: busqueda || undefined, page_size: 6 });
+  const resultados = useProductos({ q: busqueda || undefined, page: paginaBusqueda, page_size: 6 });
   const producto = useProducto(idProducto ?? undefined);
   const disponibilidad = useDisponibilidad(
     idProducto && idTalla && idColor && idSucursal
@@ -67,10 +73,6 @@ export default function PaginaNuevaReserva() {
     [disponibilidad.data],
   );
 
-  useEffect(() => {
-    if (!autenticado) navegar('/login', { state: { desde: '/reservas/nueva' } });
-  }, [autenticado, navegar]);
-
   function elegirProducto(p: Producto) {
     setIdProducto(p.id_producto);
     setIdTalla(null);
@@ -80,7 +82,13 @@ export default function PaginaNuevaReserva() {
 
   function agregarLinea() {
     const p = producto.data;
-    if (!p || !idTalla || !idColor) {
+    if (
+      !p?.activo ||
+      !idTalla ||
+      !idColor ||
+      !p.tallas.some((t) => t.id_talla === idTalla) ||
+      !p.colores.some((c) => c.id_color === idColor)
+    ) {
       setError('Selecciona prenda, talla y color antes de agregarla a la reserva.');
       return;
     }
@@ -88,6 +96,11 @@ export default function PaginaNuevaReserva() {
       setError('Selecciona primero la sucursal donde te probaras las prendas.');
       return;
     }
+    if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > 100)
+      return setError('Elige entre 1 y 100 unidades por variante.');
+    if (lineas.length >= 50) return setError('La reserva admite hasta 50 variantes.');
+    if (!disponibilidad.isSuccess)
+      return setError('Espera a que se confirme la disponibilidad de esta variante.');
     if (disponible < cantidad) {
       setError('No hay unidades suficientes de esa combinacion en la sucursal elegida.');
       return;
@@ -120,9 +133,11 @@ export default function PaginaNuevaReserva() {
   }
 
   async function confirmar() {
-    if (!idSucursal) return setError('Selecciona una sucursal.');
+    if (!idSucursal || !sucursales.data?.some((s) => s.id_sucursal === idSucursal))
+      return setError('Selecciona una sucursal activa.');
     if (lineas.length === 0) return setError('Agrega al menos una prenda a la reserva.');
-    if (!horario) return setError('Indica el horario aproximado de tu visita.');
+    if (!horario || !Number.isFinite(Date.parse(horario)) || Date.parse(horario) <= Date.now())
+      return setError('Indica una fecha y hora futura para la visita.');
     if (!esCliente) return setError('Solo las cuentas de cliente pueden crear reservas.');
 
     try {
@@ -137,7 +152,7 @@ export default function PaginaNuevaReserva() {
           cantidad: c,
         })),
       });
-      toast.exito('Reserva creada. Te avisaremos cuando este lista.');
+      toast.exito('Reserva creada. Puedes consultar su preparacion en Mis reservas.');
       navegar(`/mis-reservas?destacada=${reserva.id_reserva}`, { replace: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No pudimos crear la reserva.');
@@ -151,7 +166,8 @@ export default function PaginaNuevaReserva() {
           <p className="fs-eyebrow">Reserva en tienda</p>
           <h1>Aparta prendas para probartelas</h1>
           <p className="fs-sub">
-            Elige la sucursal, arma tu seleccion y pasa a probarte las prendas en el horario que indiques.
+            Elige la sucursal, arma tu seleccion y pasa a probarte las prendas en el horario que
+            indiques.
           </p>
         </div>
 
@@ -159,11 +175,22 @@ export default function PaginaNuevaReserva() {
 
         <div className="fs-panel">
           <h3>1. Sucursal y horario</h3>
+          {sucursales.isPending && <p>Cargando sucursales...</p>}
+          {sucursales.isError && (
+            <ErrorEstado error={sucursales.error} onReintentar={() => sucursales.refetch()} />
+          )}
+          {lineas.length > 0 && (
+            <p className="fs-sub">
+              Todas las prendas pertenecen a la misma sucursal. Para cambiarla, quita primero las
+              prendas de la seleccion.
+            </p>
+          )}
           <div className="fs-rejilla-form">
             <div className="fs-campo">
               <label htmlFor="sucursal-reserva">Sucursal</label>
               <select
                 id="sucursal-reserva"
+                disabled={lineas.length > 0 || crear.isPending}
                 className="fs-select"
                 value={idSucursal}
                 onChange={(e) => setIdSucursal(e.target.value ? Number(e.target.value) : '')}
@@ -191,6 +218,7 @@ export default function PaginaNuevaReserva() {
             <label htmlFor="observacion">Observacion (opcional)</label>
             <textarea
               id="observacion"
+              maxLength={500}
               className="fs-textarea"
               placeholder="Por ejemplo: quiero probar dos tallas del mismo vestido."
               value={observacion}
@@ -209,10 +237,18 @@ export default function PaginaNuevaReserva() {
               className="fs-input"
               placeholder="Escribe el nombre de la prenda"
               value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
+              onChange={(e) => {
+                setBusqueda(e.target.value);
+                setPaginaBusqueda(1);
+              }}
             />
           </div>
 
+          {resultados.isPending && <p>Buscando prendas...</p>}
+          {resultados.isError && (
+            <ErrorEstado error={resultados.error} onReintentar={() => resultados.refetch()} />
+          )}
+          {resultados.data?.total === 0 && <p>No hay prendas que coincidan con la busqueda.</p>}
           <div className="fs-pos__resultados">
             {resultados.data?.items.map((p) => (
               <button
@@ -220,7 +256,9 @@ export default function PaginaNuevaReserva() {
                 type="button"
                 className="fs-pos__item"
                 onClick={() => elegirProducto(p)}
-                style={idProducto === p.id_producto ? { borderColor: 'var(--fs-acento)' } : undefined}
+                style={
+                  idProducto === p.id_producto ? { borderColor: 'var(--fs-acento)' } : undefined
+                }
               >
                 <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{p.nombre}</span>
                 <span className="fs-sub">{p.categoria?.nombre}</span>
@@ -228,6 +266,27 @@ export default function PaginaNuevaReserva() {
             ))}
           </div>
 
+          {resultados.data && (
+            <Paginacion
+              page={resultados.data.page}
+              pageSize={resultados.data.page_size}
+              total={resultados.data.total}
+              onCambiar={setPaginaBusqueda}
+            />
+          )}
+          {idProducto && producto.isPending && <p>Cargando prenda...</p>}
+          {producto.isError && (
+            <ErrorEstado error={producto.error} onReintentar={() => producto.refetch()} />
+          )}
+          {disponibilidad.isError && (
+            <ErrorEstado
+              error={disponibilidad.error}
+              onReintentar={() => disponibilidad.refetch()}
+            />
+          )}
+          {idSucursal && idTalla && idColor && disponibilidad.isPending && (
+            <p>Consultando disponibilidad...</p>
+          )}
           {producto.data && (
             <div className="fs-pila" style={{ gap: 12 }}>
               <hr className="fs-divisor" />
@@ -268,20 +327,38 @@ export default function PaginaNuevaReserva() {
 
               <div className="fs-fila-wrap">
                 <div className="fs-cantidad">
-                  <button type="button" onClick={() => setCantidad((c) => Math.max(1, c - 1))} disabled={cantidad <= 1}>
+                  <button
+                    type="button"
+                    onClick={() => setCantidad((c) => Math.max(1, c - 1))}
+                    disabled={cantidad <= 1}
+                  >
                     -
                   </button>
                   <span>{cantidad}</span>
-                  <button type="button" onClick={() => setCantidad((c) => c + 1)}>
+                  <button
+                    type="button"
+                    onClick={() => setCantidad((c) => c + 1)}
+                    disabled={cantidad >= Math.min(100, disponible) || !disponibilidad.isSuccess}
+                  >
                     +
                   </button>
                 </div>
 
-                {idSucursal && idTalla && idColor && !disponibilidad.isPending && (
+                {idSucursal && idTalla && idColor && disponibilidad.isSuccess && (
                   <BadgeStock disponible={disponible} />
                 )}
 
-                <button type="button" className="fs-btn fs-btn--contorno" onClick={agregarLinea}>
+                <button
+                  type="button"
+                  className="fs-btn fs-btn--contorno"
+                  onClick={agregarLinea}
+                  disabled={
+                    crear.isPending ||
+                    !disponibilidad.isSuccess ||
+                    !producto.data.activo ||
+                    lineas.length >= 50
+                  }
+                >
                   Agregar a la reserva
                 </button>
               </div>
@@ -296,7 +373,11 @@ export default function PaginaNuevaReserva() {
 
         <div className="fs-pila" style={{ gap: 12 }}>
           {lineas.map((l, i) => (
-            <div key={`${l.id_producto}-${l.id_talla}-${l.id_color}`} className="fs-fila" style={{ gap: 10 }}>
+            <div
+              key={`${l.id_producto}-${l.id_talla}-${l.id_color}`}
+              className="fs-fila"
+              style={{ gap: 10 }}
+            >
               <div className="fs-linea-item__img" style={{ width: 52 }}>
                 <ImagenProducto src={l.imagen} alt={l.nombre} />
               </div>
@@ -310,6 +391,7 @@ export default function PaginaNuevaReserva() {
                 type="button"
                 className="fs-btn fs-btn--fantasma fs-btn--s"
                 onClick={() => setLineas((actuales) => actuales.filter((_, idx) => idx !== i))}
+                disabled={crear.isPending}
                 aria-label={`Quitar ${l.nombre}`}
               >
                 &times;
@@ -320,13 +402,14 @@ export default function PaginaNuevaReserva() {
 
         <hr className="fs-divisor" />
         <p className="fs-sub">
-          La reserva no es una compra: las prendas quedan apartadas para que puedas probartelas en tienda.
+          La reserva no es una compra: las prendas quedan apartadas para que puedas probartelas en
+          tienda.
         </p>
         <button
           type="button"
           className="fs-btn fs-btn--acento fs-btn--bloque"
           onClick={confirmar}
-          disabled={crear.isPending || lineas.length === 0}
+          disabled={crear.isPending || lineas.length === 0 || sucursales.isError}
         >
           {crear.isPending ? 'Creando reserva...' : 'Confirmar reserva'}
         </button>

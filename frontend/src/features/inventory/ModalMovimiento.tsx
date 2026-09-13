@@ -3,23 +3,29 @@ import { Modal } from '../../components/ui/Modal';
 import { useToast } from '../../context/ToastContext';
 import { useRegistrarMovimiento } from '../../hooks/useOperaciones';
 import { stockDisponible } from '../../lib/domain';
-import { numeroPositivo } from '../../lib/validacion';
 import { TipoMovimiento, type Inventario } from '../../types/domain';
 
 /** Tipos que un encargado puede registrar manualmente. */
 const TIPOS: Array<{ valor: TipoMovimiento; texto: string; ayuda: string }> = [
-  { valor: TipoMovimiento.ENTRADA, texto: 'Entrada', ayuda: 'Recepcion de mercaderia del proveedor.' },
-  { valor: TipoMovimiento.DEVOLUCION, texto: 'Devolucion', ayuda: 'La prenda regresa al stock fisico.' },
-  { valor: TipoMovimiento.AJUSTE, texto: 'Ajuste de inventario', ayuda: 'Fija el stock fisico al valor indicado.' },
+  {
+    valor: TipoMovimiento.ENTRADA,
+    texto: 'Entrada',
+    ayuda: 'Recepcion de mercaderia del proveedor.',
+  },
+  {
+    valor: TipoMovimiento.DEVOLUCION,
+    texto: 'Devolucion',
+    ayuda: 'La prenda regresa al stock fisico.',
+  },
+  {
+    valor: TipoMovimiento.AJUSTE,
+    texto: 'Ajuste de inventario',
+    ayuda: 'Fija el stock fisico al valor indicado.',
+  },
   {
     valor: TipoMovimiento.INGRESO_PENDIENTE,
     texto: 'Ingreso programado',
     ayuda: 'Registra una entrada futura sin modificar el stock actual.',
-  },
-  {
-    valor: TipoMovimiento.LIBERACION_RESERVA,
-    texto: 'Liberar reserva',
-    ayuda: 'Devuelve unidades reservadas a disponibles.',
   },
 ];
 
@@ -53,11 +59,24 @@ export function ModalMovimiento({ inventario, onCerrar }: Props) {
 
   async function enviar() {
     if (!inventario) return;
-    const errorCantidad = numeroPositivo(cantidad);
-    if (errorCantidad) return setError(errorCantidad);
-    if (tipo === TipoMovimiento.LIBERACION_RESERVA && cantidad > inventario.cantidad_reservada) {
-      return setError('No puedes liberar mas unidades de las que estan reservadas.');
-    }
+    if (!Number.isInteger(cantidad) || cantidad < (tipo === TipoMovimiento.AJUSTE ? 0 : 1))
+      return setError('Ingresa una cantidad entera valida.');
+    if (tipo === TipoMovimiento.AJUSTE && cantidad < inventario.cantidad_reservada)
+      return setError('El stock fisico no puede ser menor que las unidades reservadas.');
+    if (tipo === TipoMovimiento.AJUSTE && cantidad === inventario.cantidad_fisica)
+      return setError('El stock final debe ser diferente al actual.');
+    if (
+      (tipo === TipoMovimiento.AJUSTE || tipo === TipoMovimiento.DEVOLUCION) &&
+      !observacion.trim()
+    )
+      return setError('Explica el motivo del ajuste o la devolucion.');
+    if (
+      tipo === TipoMovimiento.INGRESO_PENDIENTE &&
+      (!fechaProgramada ||
+        !Number.isFinite(Date.parse(fechaProgramada)) ||
+        Date.parse(fechaProgramada) <= Date.now())
+    )
+      return setError('Indica una fecha y hora futura.');
 
     try {
       await registrar.mutateAsync({
@@ -79,13 +98,18 @@ export function ModalMovimiento({ inventario, onCerrar }: Props) {
     <Modal
       abierto={inventario !== null}
       titulo="Registrar movimiento de inventario"
-      onCerrar={onCerrar}
+      onCerrar={() => !registrar.isPending && onCerrar()}
       pie={
         <>
           <button type="button" className="fs-btn fs-btn--contorno" onClick={onCerrar}>
             Cancelar
           </button>
-          <button type="button" className="fs-btn fs-btn--acento" onClick={enviar} disabled={registrar.isPending}>
+          <button
+            type="button"
+            className="fs-btn fs-btn--acento"
+            onClick={enviar}
+            disabled={registrar.isPending}
+          >
             {registrar.isPending ? 'Registrando...' : 'Registrar'}
           </button>
         </>
@@ -95,9 +119,10 @@ export function ModalMovimiento({ inventario, onCerrar }: Props) {
         <div className="fs-pila">
           <div className="fs-alerta fs-alerta--info">
             <span>
-              {inventario.producto?.nombre} - Talla {inventario.talla?.nombre} - {inventario.color?.nombre} -{' '}
-              {inventario.sucursal?.nombre}. Fisico {inventario.cantidad_fisica}, reservado{' '}
-              {inventario.cantidad_reservada}, disponible {stockDisponible(inventario)}.
+              {inventario.producto?.nombre} - Talla {inventario.talla?.nombre} -{' '}
+              {inventario.color?.nombre} - {inventario.sucursal?.nombre}. Fisico{' '}
+              {inventario.cantidad_fisica}, reservado {inventario.cantidad_reservada}, disponible{' '}
+              {stockDisponible(inventario)}.
             </span>
           </div>
 
@@ -128,7 +153,8 @@ export function ModalMovimiento({ inventario, onCerrar }: Props) {
               <input
                 id="cantidad-movimiento"
                 type="number"
-                min={1}
+                min={tipo === TipoMovimiento.AJUSTE ? inventario.cantidad_reservada : 1}
+                step={1}
                 className="fs-input"
                 value={cantidad}
                 onChange={(e) => setCantidad(Number(e.target.value))}
@@ -139,6 +165,7 @@ export function ModalMovimiento({ inventario, onCerrar }: Props) {
               <label htmlFor="referencia-movimiento">Referencia</label>
               <input
                 id="referencia-movimiento"
+                maxLength={150}
                 className="fs-input"
                 placeholder="OC-2026-014"
                 value={referencia}
@@ -151,7 +178,7 @@ export function ModalMovimiento({ inventario, onCerrar }: Props) {
                 <label htmlFor="fecha-programada">Fecha programada</label>
                 <input
                   id="fecha-programada"
-                  type="date"
+                  type="datetime-local"
                   className="fs-input"
                   value={fechaProgramada}
                   onChange={(e) => setFechaProgramada(e.target.value)}
@@ -164,6 +191,7 @@ export function ModalMovimiento({ inventario, onCerrar }: Props) {
             <label htmlFor="observacion-movimiento">Observacion</label>
             <textarea
               id="observacion-movimiento"
+              maxLength={500}
               className="fs-textarea"
               value={observacion}
               onChange={(e) => setObservacion(e.target.value)}

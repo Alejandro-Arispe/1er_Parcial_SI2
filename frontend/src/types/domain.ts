@@ -1,7 +1,6 @@
 /**
  * Modelo de dominio FashionStore (MVP - 23 clases).
- * Los nombres de campo replican el diagrama de clases para que la respuesta
- * del backend NestJS pueda consumirse sin capa de mapeo.
+ * Modelo de las pantallas. Los contratos de NestJS se adaptan en src/api.
  */
 
 /* ============================================================
@@ -27,6 +26,8 @@ export const CanalVenta = {
 export type CanalVenta = (typeof CanalVenta)[keyof typeof CanalVenta];
 
 export const EstadoVenta = {
+  BORRADOR: 'BORRADOR',
+  REEMBOLSADA: 'REEMBOLSADA',
   PENDIENTE: 'PENDIENTE',
   PAGADA: 'PAGADA',
   ENTREGADA: 'ENTREGADA',
@@ -50,6 +51,7 @@ export const TipoPago = {
 export type TipoPago = (typeof TipoPago)[keyof typeof TipoPago];
 
 export const EstadoPago = {
+  REEMBOLSADO: 'REEMBOLSADO',
   PENDIENTE: 'PENDIENTE',
   APROBADO: 'APROBADO',
   RECHAZADO: 'RECHAZADO',
@@ -65,6 +67,8 @@ export const TipoMovimiento = {
   DEVOLUCION: 'DEVOLUCION',
   AJUSTE: 'AJUSTE',
   INGRESO_PENDIENTE: 'INGRESO_PENDIENTE',
+  RETENCION_COMPRA: 'RETENCION_COMPRA',
+  LIBERACION_COMPRA: 'LIBERACION_COMPRA',
 } as const;
 export type TipoMovimiento = (typeof TipoMovimiento)[keyof typeof TipoMovimiento];
 
@@ -96,12 +100,23 @@ export interface Rol {
 }
 
 export interface Usuario {
+  proveedor_nombre?: string;
+  proveedor_activo?: boolean;
+  mayorista?: boolean;
   id_usuario: number;
   nombre: string;
   email: string;
   activo: boolean;
   fecha_registro: string;
   roles: Rol[];
+  /** Una cuenta puede tener simultaneamente perfil de cliente y empleado. */
+  id_cliente?: number;
+  telefono?: string;
+  direccion?: string;
+  id_empleado?: number;
+  cargo?: string;
+  id_sucursal?: number | null;
+  sucursal?: Sucursal | null;
   /** Presente cuando la cuenta representa a un proveedor del catalogo. */
   id_proveedor?: number | null;
 }
@@ -120,6 +135,7 @@ export interface Empleado extends Usuario {
 }
 
 export interface Sucursal {
+  nombre_almacen?: string;
   id_sucursal: number;
   nombre: string;
   ciudad: string;
@@ -175,10 +191,15 @@ export interface Color {
 }
 
 export interface Producto {
+  imagenes?: string[];
+  precio_mayorista?: number | null;
   id_producto: number;
   nombre: string;
   descripcion: string;
   precio: number;
+  precio_actual?: number;
+  promocion_activa?: boolean;
+  recursos_ra?: RecursoRA[];
   imagen_url: string;
   descuento_pct: number;
   promo_inicio: string | null;
@@ -211,8 +232,21 @@ export interface Inventario {
   id_color: number;
   cantidad_fisica: number;
   cantidad_reservada: number;
-  sucursal?: Sucursal;
-  producto?: Producto;
+  sucursal?: Pick<Sucursal, 'id_sucursal' | 'nombre' | 'ciudad' | 'activa'>;
+  producto?: Pick<Producto, 'id_producto' | 'nombre' | 'imagen_url' | 'activo'>;
+  talla?: Talla;
+  color?: Color;
+}
+
+/** La consulta publica expone disponibilidad, no cantidades fisicas/reservadas. */
+export interface Disponibilidad {
+  id_inventario: number;
+  id_sucursal: number;
+  id_producto: number;
+  id_talla: number;
+  id_color: number;
+  cantidad_disponible: number;
+  sucursal?: Pick<Sucursal, 'id_sucursal' | 'nombre' | 'ciudad' | 'activa'>;
   talla?: Talla;
   color?: Color;
 }
@@ -244,7 +278,7 @@ export interface DetalleReserva {
   id_color: number;
   cantidad: number;
   estado: string;
-  producto?: Producto;
+  producto?: Pick<Producto, 'id_producto' | 'nombre' | 'imagen_url'>;
   talla?: Talla;
   color?: Color;
 }
@@ -256,10 +290,11 @@ export interface Reserva {
   fecha_reserva: string;
   horario_aproximado: string;
   estado: EstadoReserva;
+  vence_en?: string;
   observacion: string;
   detalles: DetalleReserva[];
   cliente?: { id_cliente: number; nombre: string; telefono: string; email: string };
-  sucursal?: Sucursal;
+  sucursal?: Pick<Sucursal, 'id_sucursal' | 'nombre' | 'ciudad' | 'direccion'>;
 }
 
 /* ============================================================
@@ -274,17 +309,30 @@ export interface DetalleCarrito {
   id_color: number;
   cantidad: number;
   precio_unitario: number;
-  producto?: Producto;
+  producto?: Pick<Producto, 'id_producto' | 'nombre' | 'imagen_url' | 'activo'>;
+  subtotal?: number;
+  precio_guardado?: number;
+  precio_cambio?: boolean;
+  disponible?: boolean;
+  problema?: 'PRODUCT_INACTIVE' | 'VARIANT_UNAVAILABLE' | 'INSUFFICIENT_STOCK' | null;
+  disponibilidad?: Array<{
+    sucursal: Pick<Sucursal, 'id_sucursal' | 'nombre' | 'ciudad'>;
+    cantidad_disponible: number;
+  }>;
   talla?: Talla;
   color?: Color;
 }
 
 export interface Carrito {
   id_carrito: number;
-  id_cliente: number;
+  id_cliente?: number;
   fecha_creacion: string;
   estado: EstadoCarrito;
   detalles: DetalleCarrito[];
+  total?: number;
+  cantidad_total?: number;
+  sucursales_disponibles?: Array<Pick<Sucursal, 'id_sucursal' | 'nombre' | 'ciudad'>>;
+  tiene_disponibilidad?: boolean;
 }
 
 /* ============================================================
@@ -300,7 +348,7 @@ export interface DetalleVenta {
   cantidad: number;
   precio_unitario: number;
   descuento: number;
-  producto?: Producto;
+  producto?: Pick<Producto, 'id_producto' | 'nombre'>;
   talla?: Talla;
   color?: Color;
 }
@@ -317,6 +365,12 @@ export interface Pago {
 }
 
 export interface Venta {
+  contra_entrega?: boolean;
+  id_turno?: number | null;
+  moneda?: string;
+  numero_comprobante?: string;
+  comprobante_disponible?: boolean;
+  cajero?: string;
   id_venta: number;
   id_cliente: number | null;
   id_empleado: number | null;

@@ -1,3 +1,5 @@
+import { USAR_MOCKS } from '../../api/config';
+import EntregasProveedorReal from './EntregasProveedorReal';
 import { ErrorEstado, FilasSkeleton, Vacio } from '../../components/ui/Estados';
 import { useAuth } from '../../context/AuthContext';
 import { useMovimientos, useProductosDeProveedor } from '../../hooks/useOperaciones';
@@ -9,11 +11,19 @@ import { TipoMovimiento } from '../../types/domain';
  * La informacion proviene de MovimientoInventario con tipo INGRESO_PENDIENTE.
  */
 export default function PaginaEntregas() {
+  return USAR_MOCKS ? (
+    <EntregasDemo />
+  ) : (
+    <EntregasProveedorReal />
+  );
+}
+
+function EntregasDemo() {
   const { usuario } = useAuth();
   const idProveedor = usuario?.id_proveedor ?? undefined;
 
   const productos = useProductosDeProveedor(idProveedor);
-  const movimientos = useMovimientos({ tipo: TipoMovimiento.INGRESO_PENDIENTE });
+  const movimientos = useMovimientos({ id_inventario: 0, tipo: TipoMovimiento.INGRESO_PENDIENTE });
 
   const idsPropios = new Set(productos.data?.map((p) => p.id_producto) ?? []);
   const entregas = (movimientos.data?.items ?? []).filter((m) =>
@@ -32,7 +42,9 @@ export default function PaginaEntregas() {
 
       <section className="fs-tarjeta fs-tarjeta--pad">
         {(movimientos.isPending || productos.isPending) && <FilasSkeleton filas={4} />}
-        {movimientos.isError && <ErrorEstado error={movimientos.error} onReintentar={() => movimientos.refetch()} />}
+        {movimientos.isError && (
+          <ErrorEstado error={movimientos.error} onReintentar={() => movimientos.refetch()} />
+        )}
 
         {movimientos.data && entregas.length === 0 && (
           <Vacio

@@ -5,7 +5,10 @@
 import type { Inventario, Producto } from '../types/domain';
 
 /** Inventario.stockDisponible() */
-export function stockDisponible(inv: Pick<Inventario, 'cantidad_fisica' | 'cantidad_reservada'>): number {
+export function stockDisponible(
+  inv: Pick<Inventario, 'cantidad_fisica' | 'cantidad_reservada'> | { cantidad_disponible: number },
+): number {
+  if ('cantidad_disponible' in inv) return Math.max(0, inv.cantidad_disponible);
   return Math.max(0, inv.cantidad_fisica - inv.cantidad_reservada);
 }
 
@@ -19,6 +22,7 @@ export function hayDisponibilidad(
 
 /** La promocion solo aplica dentro de la ventana promo_inicio..promo_fin. */
 export function promocionVigente(producto: Producto, referencia: Date = new Date()): boolean {
+  if (producto.promocion_activa !== undefined) return producto.promocion_activa;
   if (!producto.descuento_pct || producto.descuento_pct <= 0) return false;
   const hoy = referencia.getTime();
   const inicio = producto.promo_inicio ? new Date(producto.promo_inicio).getTime() : -Infinity;
@@ -28,6 +32,7 @@ export function promocionVigente(producto: Producto, referencia: Date = new Date
 
 /** Producto.obtenerPrecioActual() */
 export function precioActual(producto: Producto, referencia: Date = new Date()): number {
+  if (producto.precio_actual !== undefined) return producto.precio_actual;
   if (!promocionVigente(producto, referencia)) return producto.precio;
   return redondear(producto.precio * (1 - producto.descuento_pct / 100));
 }

@@ -397,6 +397,20 @@
   .fs-panel-top__hamburguesa { display: inline-flex; }
 }
 
+@media print {
+  body:has(.fs-comprobante) { overflow: visible !important; background: white; }
+  body:has(.fs-comprobante) *:not(:has(.fs-comprobante)):not(.fs-comprobante):not(.fs-comprobante *),
+  .fs-no-imprimir { display: none !important; }
+  body *:has(.fs-comprobante) {
+    display: block; position: static; width: 100%; max-width: none;
+    height: auto; max-height: none; min-height: 0; overflow: visible;
+    padding: 0; margin: 0; transform: none;
+    background: white; border: 0; box-shadow: none;
+  }
+  .fs-comprobante .fs-tabla-scroll { overflow: visible; }
+  .fs-comprobante tr { break-inside: avoid; }
+}
+
 @media (max-width: 560px) {
   .fs-rejilla-productos { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--fs-esp-4); }
   .fs-panel-main { padding: var(--fs-esp-4); }

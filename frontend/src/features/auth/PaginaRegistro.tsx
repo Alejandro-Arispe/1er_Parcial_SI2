@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { ErrorApi } from '../../types/api';
 import {
   email as validarEmail,
   hayErrores,
-  longitudMinima,
+  passwordRegistro,
   requerido,
   type Errores,
 } from '../../lib/validacion';
@@ -44,9 +45,12 @@ export default function PaginaRegistro() {
     if (enviando) return;
 
     const nuevos: Errores<Campos> = {
-      nombre: requerido(campos.nombre, 'Ingresa tu nombre completo'),
-      email: validarEmail(campos.email),
-      password: requerido(campos.password, 'Ingresa una contrasena') ?? longitudMinima(campos.password, 6),
+      nombre: requerido(campos.nombre, 'Ingresa tu nombre completo') ??
+        (campos.nombre.trim().length < 2 || campos.nombre.trim().length > 120 ? 'El nombre debe tener entre 2 y 120 caracteres' : undefined),
+      email: validarEmail(campos.email) ?? (campos.email.trim().length > 180 ? 'El correo admite como maximo 180 caracteres' : undefined),
+      password: passwordRegistro(campos.password),
+      telefono: campos.telefono.trim().length > 30 ? 'Usa como maximo 30 caracteres' : undefined,
+      direccion: campos.direccion.trim().length > 250 ? 'Usa como maximo 250 caracteres' : undefined,
       confirmacion: campos.password !== campos.confirmacion ? 'Las contrasenas no coinciden' : undefined,
     };
     setErrores(nuevos);
@@ -64,7 +68,7 @@ export default function PaginaRegistro() {
       });
       navegar('/', { replace: true });
     } catch (error) {
-      setErrorGeneral(error instanceof Error ? error.message : 'No pudimos crear tu cuenta.');
+      setErrorGeneral(error instanceof ErrorApi ? error.mensajes.join(' ') : error instanceof Error ? error.message : 'No pudimos crear tu cuenta.');
     } finally {
       setEnviando(false);
     }
@@ -95,6 +99,7 @@ export default function PaginaRegistro() {
             <label htmlFor="nombre">Nombre completo</label>
             <input
               id="nombre"
+              maxLength={120}
               className={`fs-input${errores.nombre ? ' fs-input--error' : ''}`}
               value={campos.nombre}
               onChange={(e) => cambiar('nombre', e.target.value)}
@@ -106,6 +111,7 @@ export default function PaginaRegistro() {
             <label htmlFor="email-registro">Correo electronico</label>
             <input
               id="email-registro"
+              maxLength={180}
               type="email"
               autoComplete="email"
               className={`fs-input${errores.email ? ' fs-input--error' : ''}`}
@@ -121,12 +127,16 @@ export default function PaginaRegistro() {
               <input
                 id="pass"
                 type="password"
+                minLength={8}
+                maxLength={72}
+                aria-describedby="ayuda-password"
                 autoComplete="new-password"
                 className={`fs-input${errores.password ? ' fs-input--error' : ''}`}
                 value={campos.password}
                 onChange={(e) => cambiar('password', e.target.value)}
               />
               {errores.password && <span className="fs-campo-error">{errores.password}</span>}
+              <span id="ayuda-password" className="fs-campo-ayuda">Entre 8 y 72 caracteres, con mayuscula, minuscula y numero.</span>
             </div>
 
             <div className="fs-campo">
@@ -148,19 +158,23 @@ export default function PaginaRegistro() {
               <label htmlFor="telefono">Telefono</label>
               <input
                 id="telefono"
+                maxLength={30}
                 className="fs-input"
                 value={campos.telefono}
                 onChange={(e) => cambiar('telefono', e.target.value)}
               />
+              {errores.telefono && <span className="fs-campo-error">{errores.telefono}</span>}
             </div>
             <div className="fs-campo">
               <label htmlFor="direccion">Direccion</label>
               <input
                 id="direccion"
+                maxLength={250}
                 className="fs-input"
                 value={campos.direccion}
                 onChange={(e) => cambiar('direccion', e.target.value)}
               />
+              {errores.direccion && <span className="fs-campo-error">{errores.direccion}</span>}
             </div>
           </div>
 
