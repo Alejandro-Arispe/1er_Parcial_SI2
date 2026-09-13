@@ -17,8 +17,9 @@ import {
   type FiltrosUsuario,
 } from '../services/organizacion.service';
 import { reportesService } from '../services/reportes.service';
-import { iaService } from '../services/ia.service';
-import type { FiltroReporte } from '../types/reportes';
+import { iaService, type OpcionesRecomendacion } from '../services/ia.service';
+import type { MensajeChat } from '../types/ia';
+import type { FiltroInventarioReporte, FiltroReporte } from '../types/reportes';
 import { claves } from './claves';
 
 const CACHE_LARGO = 10 * 60 * 1000;
@@ -152,24 +153,10 @@ export function useDesactivarUsuario() {
 
 /* ---------------- reportes ---------------- */
 
-export function useResumen(filtros: FiltroReporte = {}) {
+export function useReporteVentas(filtros: FiltroReporte = {}) {
   return useQuery({
-    queryKey: claves.reportes('resumen', filtros),
-    queryFn: () => reportesService.resumen(filtros),
-  });
-}
-
-export function useVentasPorPeriodo(filtros: FiltroReporte = {}) {
-  return useQuery({
-    queryKey: claves.reportes('periodo', filtros),
-    queryFn: () => reportesService.ventasPorPeriodo(filtros),
-  });
-}
-
-export function useVentasPorSucursal(filtros: FiltroReporte = {}) {
-  return useQuery({
-    queryKey: claves.reportes('sucursal', filtros),
-    queryFn: () => reportesService.ventasPorSucursal(filtros),
+    queryKey: claves.reportes('ventas', filtros),
+    queryFn: () => reportesService.ventas(filtros),
   });
 }
 
@@ -180,12 +167,18 @@ export function useTopProductos(filtros: FiltroReporte & { limite?: number } = {
   });
 }
 
-export function useInventarioCritico(
-  filtros: FiltroReporte & { umbral?: number; limite?: number } = {},
-) {
+export function useReporteInventario(filtros: FiltroInventarioReporte = {}) {
   return useQuery({
-    queryKey: claves.reportes('critico', filtros),
-    queryFn: () => reportesService.inventarioCritico(filtros),
+    queryKey: claves.reportes('inventario', filtros),
+    queryFn: () => reportesService.inventario(filtros),
+    placeholderData: (anterior) => anterior,
+  });
+}
+
+export function useReporteCaja(filtros: FiltroReporte & { id_caja?: number } = {}) {
+  return useQuery({
+    queryKey: claves.reportes('caja', filtros),
+    queryFn: () => reportesService.caja(filtros),
   });
 }
 
@@ -198,21 +191,27 @@ export function useReservasPorEstado(filtros: FiltroReporte = {}) {
 
 /* ---------------- IA ---------------- */
 
-export function useRecomendaciones(
-  opciones: { limite?: number; contexto?: string } = {},
-  habilitado = true,
-) {
+export function useRecomendaciones(opciones: OpcionesRecomendacion = {}, habilitado = true) {
   return useQuery({
     queryKey: claves.recomendaciones(opciones),
     queryFn: () => iaService.recomendaciones(opciones),
-    enabled: habilitado && USAR_MOCKS,
+    enabled: habilitado,
     staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 }
 
 export function usePreguntarIA() {
   return useMutation({
-    mutationFn: ({ mensaje, historial }: { mensaje: string; historial?: string[] }) =>
+    mutationFn: ({ mensaje, historial }: { mensaje: string; historial?: MensajeChat[] }) =>
       iaService.preguntar(mensaje, historial),
   });
+}
+
+export function useEstadoIA() {
+  return useQuery({ queryKey: ['ia', 'estado'], queryFn: iaService.estado, staleTime: CACHE_LARGO });
+}
+
+export function useReporteIA() {
+  return useMutation({ mutationFn: (pregunta: string) => iaService.reporte(pregunta) });
 }

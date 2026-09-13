@@ -23,6 +23,7 @@ import { Pantalla } from '../../components/Pantalla';
 import { Precio } from '../../components/Precio';
 import { Chip } from '../../components/Selectores';
 import { usePreguntarIA } from '../../hooks/useIA';
+import { esRespuestaIA } from '../../api/ia.contratos';
 import type { MensajeChat } from '../../types/ia';
 import type { Producto } from '../../types/domain';
 import type { PropsStack } from '../../navigation/tipos';
@@ -62,8 +63,8 @@ export function PantallaAsistente({ navigation }: PropsStack<'Asistente'>) {
     setMensajes((m) => [...m, propio]);
     setEntrada('');
 
-    // Solo se envian los ultimos turnos para no crecer sin limite.
-    const historial = mensajes.slice(-6).map((m) => m.texto);
+    // El servicio envia solo los ultimos turnos reales para no crecer sin limite.
+    const historial = mensajes;
 
     try {
       const respuesta = await preguntar.mutateAsync({ mensaje: consulta, historial });
@@ -74,6 +75,7 @@ export function PantallaAsistente({ navigation }: PropsStack<'Asistente'>) {
           rol: 'asistente',
           texto: respuesta.respuesta,
           productos: respuesta.productos_sugeridos,
+          origen: respuesta.origen,
           fecha: new Date().toISOString(),
         },
       ]);
@@ -173,6 +175,11 @@ function Burbuja({
       <View style={[estilos.burbuja, propio ? estilos.burbujaPropia : estilos.burbujaAsistente]}>
         <Text style={[estilos.texto, propio && estilos.textoPropio]}>{mensaje.texto}</Text>
       </View>
+      {mensaje.origen && !propio ? (
+        <Text style={estilos.escribiendoTexto}>
+          {esRespuestaIA(mensaje.origen) ? 'Respuesta generada con IA' : 'Asistente sin IA: coincidencias del catalogo'}
+        </Text>
+      ) : null}
 
       {mensaje.productos?.length ? (
         <View style={estilos.sugeridos}>

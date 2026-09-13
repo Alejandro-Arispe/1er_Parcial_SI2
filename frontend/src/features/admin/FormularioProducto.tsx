@@ -1,4 +1,5 @@
 import { EditorFotos } from './EditorFotos';
+import { EditorRecursosRA } from './EditorRecursosRA';
 import { useQuery } from '@tanstack/react-query';
 import { proveedorService } from '../../services/proveedor.service';
 import { USAR_MOCKS } from '../../api/config';
@@ -390,6 +391,8 @@ export function FormularioProducto({ abierto, producto, onCerrar }: Props) {
             setDatos((d) => ({ ...d, imagenes, imagen_url: imagenes[0] ?? '' }))
           }
         />
+        <hr className="fs-divisor" />
+        <EditorRecursosRA idProducto={producto?.id_producto} />
         <hr className="fs-divisor" />
         <p className="fs-eyebrow">Promocion</p>
         <div className="fs-rejilla-form">

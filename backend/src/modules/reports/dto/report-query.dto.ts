@@ -17,6 +17,14 @@ export class PeriodReportQueryDto extends BranchReportQueryDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   to?: string;
 }
+export class CashShiftsReportQueryDto extends PeriodReportQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(2147483647)
+  registerId?: number;
+}
 export class SalesReportQueryDto extends PeriodReportQueryDto {
   @IsOptional()
   @IsIn(['IN_STORE', 'WEB', 'MOBILE'])

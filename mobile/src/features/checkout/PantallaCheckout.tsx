@@ -1,89 +1,94 @@
 /**
- * Compra desde el movil.
+ * Compra desde el movil (canal MOBILE).
  *
- *   Carrito -> Resumen -> Datos -> Metodo de pago -> Confirmacion -> Resultado
+ *   Resumen -> Sucursal con stock -> Cotizacion del servidor -> Pago -> Resultado
  *
- * La venta se registra con canal MOVIL. El pago se envia al backend y la
- * pantalla muestra lo que el backend responda: no se simula ninguna pasarela
- * ni se da por aprobado un pago que todavia no existe.
+ * El total lo calcula NestJS (quoteHash). Con tarjeta, la venta queda pendiente
+ * y Stripe confirma el cobro; con contra entrega, se paga en efectivo al recibir.
+ * La pantalla solo muestra lo que el backend confirma.
  */
-import { useMemo, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { Boton } from '../../components/Boton';
-import { AvisoEnLinea, Cargando } from '../../components/Estados';
+import { Campo } from '../../components/Campo';
+import { AvisoEnLinea, Cargando, ErrorVista } from '../../components/Estados';
 import { ImagenProducto } from '../../components/ImagenProducto';
 import { Pantalla } from '../../components/Pantalla';
 import { Chip } from '../../components/Selectores';
 import { useAvisos } from '../../context/AvisosContext';
 import { useSesion } from '../../context/SesionContext';
-import { useSucursales } from '../../hooks/useCatalogo';
-import { useCarrito, useRegistrarCompra } from '../../hooks/useComercio';
-import { subtotal, totalLineas } from '../../lib/domain';
+import { useCarrito, useConfirmarCheckout } from '../../hooks/useComercio';
 import { moneda, plural } from '../../lib/format';
 import type { PropsStack } from '../../navigation/tipos';
 import {
-  CanalVenta,
-  EstadoPago,
-  MetodoPago,
-  TipoPago,
-  type DetalleCarrito,
-  type Venta,
-} from '../../types/domain';
-
-/** Referencia estable mientras el carrito todavia no llego. */
-const SIN_LINEAS: DetalleCarrito[] = [];
+  checkoutService,
+  nuevaClaveIdempotencia,
+  type IntentoPago,
+  type OpcionPago,
+  type ResultadoCheckout,
+} from '../../services/checkout.service';
+import type { DetalleCarrito } from '../../types/domain';
+import { PagoStripeWeb } from './PagoStripeWeb';
 import { colores, esp, texto } from '../../theme';
 
-/** Metodos del dominio, con la etiqueta que entiende el cliente. */
-const METODOS: Array<{ valor: MetodoPago; texto: string; tipo: TipoPago; nota: string }> = [
-  {
-    valor: MetodoPago.QR,
-    texto: 'QR',
-    tipo: TipoPago.ELECTRONICO,
-    nota: 'Recibiras el codigo QR al confirmar el pedido.',
-  },
-  {
-    valor: MetodoPago.TARJETA,
-    texto: 'Tarjeta',
-    tipo: TipoPago.ELECTRONICO,
-    nota: 'El cobro lo procesa la pasarela del comercio.',
-  },
-  {
-    valor: MetodoPago.TRANSFERENCIA,
-    texto: 'Transferencia',
-    tipo: TipoPago.ELECTRONICO,
-    nota: 'Te enviaremos los datos bancarios para completar el pago.',
-  },
-  {
-    valor: MetodoPago.EFECTIVO,
-    texto: 'Efectivo en tienda',
-    tipo: TipoPago.PRESENCIAL,
-    nota: 'Pagas al recoger tu pedido en la sucursal elegida.',
-  },
-];
+const SIN_LINEAS: DetalleCarrito[] = [];
+const ESPERA_PAGO_MS = 3000;
+const INTENTOS_CONFIRMACION = 20;
 
 export function PantallaCheckout({ navigation }: PropsStack<'Checkout'>) {
   const { cliente, usuario } = useSesion();
   const { avisarError } = useAvisos();
   const carrito = useCarrito();
-  const { data: sucursales } = useSucursales();
-  const registrar = useRegistrarCompra();
+  const confirmar = useConfirmarCheckout();
+  const queryClient = useQueryClient();
 
-  const [metodo, setMetodo] = useState<MetodoPago>(MetodoPago.QR);
   const [idSucursal, setIdSucursal] = useState<number>();
-  const [resultado, setResultado] = useState<Venta | null>(null);
+  const [opcion, setOpcion] = useState<OpcionPago>('STRIPE');
+  // La sesion ya esta restaurada al llegar aqui: se precargan los datos del cliente.
+  const [entrega, setEntrega] = useState(() => ({
+    nombre: usuario?.nombre ?? '',
+    telefono: cliente?.telefono ?? '',
+    direccion: cliente?.direccion ?? '',
+  }));
   const [error, setError] = useState<string | null>(null);
+  const [pago, setPago] = useState<{ saleId: number; intento: IntentoPago; total: number } | null>(null);
+  const [confirmando, setConfirmando] = useState(false);
+  const [resultado, setResultado] = useState<ResultadoCheckout | null>(null);
+  /** La misma clave para reintentos de la misma cotizacion: no duplica pedidos. */
+  const clave = useRef({ quoteHash: '', valor: '' });
+
+  const idCarrito = carrito.data?.id_carrito;
+  const cotizacion = useQuery({
+    queryKey: ['checkout', 'cotizacion', idCarrito, idSucursal, carrito.dataUpdatedAt],
+    queryFn: () => checkoutService.cotizar(idCarrito!, idSucursal!),
+    enabled: Boolean(idCarrito && idSucursal) && !pago && !resultado,
+    retry: false,
+  });
 
   const detalles = carrito.data?.detalles ?? SIN_LINEAS;
-  const total = useMemo(() => totalLineas(detalles), [detalles]);
+  const sucursales = carrito.data?.sucursales_disponibles ?? [];
   const unidades = detalles.reduce((acc, d) => acc + d.cantidad, 0);
-  const metodoElegido = METODOS.find((m) => m.valor === metodo)!;
 
   if (carrito.isLoading) return <Cargando mensaje="Preparando tu compra..." />;
+  if (carrito.isError) return <ErrorVista error={carrito.error} onReintentar={() => void carrito.refetch()} />;
 
-  if (resultado) {
-    return <Resultado venta={resultado} navigation={navigation} />;
+  if (resultado) return <Resultado resultado={resultado} navigation={navigation} />;
+
+  if (pago) {
+    if (confirmando) return <Cargando mensaje="Confirmando tu pago con Stripe..." />;
+    return (
+      <Pantalla bordes={['bottom']}>
+        <PagoStripeWeb
+          publishableKey={pago.intento.publishableKey!}
+          clientSecret={pago.intento.clientSecret!}
+          monto={moneda(pago.total)}
+          onPagado={() => void esperarConfirmacion(pago.saleId)}
+          onCancelar={() => cancelarPago(pago.saleId)}
+        />
+      </Pantalla>
+    );
   }
 
   if (detalles.length === 0) {
@@ -99,41 +104,107 @@ export function PantallaCheckout({ navigation }: PropsStack<'Checkout'>) {
     );
   }
 
-  function confirmar() {
-    if (!idSucursal) {
-      setError('Elige la sucursal desde donde se prepara tu pedido.');
-      return;
+  function validar(): string | null {
+    if (!idSucursal) return 'Elige la sucursal desde donde se prepara tu pedido.';
+    if (!cotizacion.data) return 'Espera a que el servidor calcule el total.';
+    if (opcion === 'CASH_ON_DELIVERY') {
+      if (entrega.nombre.trim().length < 2) return 'Indica quien recibe el pedido.';
+      if (!/^[+\d][\d ()-]{5,29}$/.test(entrega.telefono.trim())) return 'Indica un telefono de contacto valido.';
+      if (entrega.direccion.trim().length < 10) return 'Escribe la direccion completa de entrega (minimo 10 caracteres).';
     }
-    setError(null);
+    return null;
+  }
+
+  function pedirConfirmacion() {
+    const problema = validar();
+    setError(problema);
+    if (problema || !cotizacion.data) return;
+    const total = moneda(cotizacion.data.total);
     Alert.alert(
       'Confirmar compra',
-      `Se registrara tu compra por ${moneda(total)} con pago ${metodoElegido.texto.toLowerCase()}.`,
+      opcion === 'STRIPE'
+        ? `Se apartaran tus prendas y pagaras ${total} con tarjeta.`
+        : `Pagaras ${total} en efectivo al recibir el pedido.`,
       [
         { text: 'Revisar', style: 'cancel' },
-        { text: 'Confirmar', onPress: () => void registrarCompra() },
+        { text: 'Confirmar', onPress: () => void enviar() },
       ],
     );
   }
 
-  async function registrarCompra() {
+  async function enviar() {
+    const q = cotizacion.data!;
+    if (clave.current.quoteHash !== q.quoteHash) clave.current = { quoteHash: q.quoteHash, valor: nuevaClaveIdempotencia() };
     try {
-      const venta = await registrar.mutateAsync({
-        canal: CanalVenta.MOVIL,
-        id_sucursal: idSucursal ?? null,
-        detalles: detalles.map((d) => ({
-          id_producto: d.id_producto,
-          id_talla: d.id_talla,
-          id_color: d.id_color,
-          cantidad: d.cantidad,
-        })),
-        pago: { metodo, tipo: metodoElegido.tipo },
+      const creado = await confirmar.mutateAsync({
+        cartId: q.cartId,
+        branchId: q.branchId,
+        quoteHash: q.quoteHash,
+        idempotencyKey: clave.current.valor,
+        paymentOption: opcion,
+        ...(opcion === 'CASH_ON_DELIVERY'
+          ? {
+              deliveryName: entrega.nombre.trim(),
+              deliveryPhone: entrega.telefono.trim(),
+              deliveryAddress: entrega.direccion.trim(),
+            }
+          : {}),
       });
-      setResultado(venta);
+      if (opcion === 'STRIPE' && creado.estado === 'PENDING_PAYMENT') {
+        const intento = await checkoutService.intentoStripe(creado.venta.id_venta);
+        if (intento.clientSecret && intento.publishableKey) {
+          setPago({ saleId: creado.venta.id_venta, intento, total: creado.venta.total });
+          return;
+        }
+        setResultado(await checkoutService.consultar(creado.venta.id_venta));
+        return;
+      }
+      setResultado(creado);
     } catch (e) {
-      const mensaje = e instanceof Error ? e.message : 'No pudimos registrar tu compra.';
-      setError(mensaje);
+      setError(e instanceof Error ? e.message : 'No pudimos registrar tu compra.');
       avisarError(e);
+      void queryClient.invalidateQueries({ queryKey: ['checkout'] });
     }
+  }
+
+  /** Stripe confirma el cobro y NestJS lo sincroniza: se consulta hasta verlo reflejado. */
+  async function esperarConfirmacion(saleId: number) {
+    setConfirmando(true);
+    let ultimo: ResultadoCheckout | null = null;
+    for (let i = 0; i < INTENTOS_CONFIRMACION; i++) {
+      try {
+        ultimo = await checkoutService.consultar(saleId);
+        if (ultimo.estado !== 'PENDING_PAYMENT') break;
+      } catch {
+        // Un corte momentaneo no invalida el pago: se vuelve a consultar.
+      }
+      await new Promise((r) => setTimeout(r, ESPERA_PAGO_MS));
+    }
+    void queryClient.invalidateQueries({ queryKey: ['ventas'] });
+    setConfirmando(false);
+    setPago(null);
+    if (ultimo) setResultado(ultimo);
+    else navigation.replace('Compras');
+  }
+
+  function cancelarPago(saleId: number) {
+    Alert.alert('Cancelar pago', 'Se anulara el pedido pendiente y las prendas volveran al stock.', [
+      { text: 'Seguir pagando', style: 'cancel' },
+      {
+        text: 'Cancelar pedido',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await checkoutService.cancelar(saleId);
+          } catch (e) {
+            avisarError(e);
+          }
+          setPago(null);
+          void queryClient.invalidateQueries({ queryKey: ['ventas'] });
+          navigation.replace('Compras');
+        },
+      },
+    ]);
   }
 
   return (
@@ -142,11 +213,7 @@ export function PantallaCheckout({ navigation }: PropsStack<'Checkout'>) {
         <Paso numero={1} titulo="Resumen" detalle={plural(unidades, 'prenda', 'prendas')}>
           {detalles.map((d) => (
             <View key={d.id_detalle_carrito} style={estilos.linea}>
-              <ImagenProducto
-                url={d.producto?.imagen_url}
-                claveReciclado={d.id_detalle_carrito}
-                estilo={estilos.miniatura}
-              />
+              <ImagenProducto url={d.producto?.imagen_url} claveReciclado={d.id_detalle_carrito} estilo={estilos.miniatura} />
               <View style={estilos.lineaCuerpo}>
                 <Text style={estilos.lineaNombre} numberOfLines={1}>
                   {d.producto?.nombre ?? 'Prenda'}
@@ -155,73 +222,87 @@ export function PantallaCheckout({ navigation }: PropsStack<'Checkout'>) {
                   Talla {d.talla?.nombre ?? '-'} - {d.color?.nombre ?? '-'} - x{d.cantidad}
                 </Text>
               </View>
-              <Text style={estilos.lineaTotal}>{moneda(subtotal(d.cantidad, d.precio_unitario))}</Text>
+              <Text style={estilos.lineaTotal}>{moneda(d.subtotal ?? d.cantidad * d.precio_unitario)}</Text>
             </View>
           ))}
         </Paso>
 
-        <Paso numero={2} titulo="Tus datos">
-          <View style={estilos.datos}>
-            <Dato etiqueta="Nombre" valor={usuario?.nombre ?? '-'} />
-            <Dato etiqueta="Correo" valor={usuario?.email ?? '-'} />
-            <Dato etiqueta="Telefono" valor={cliente?.telefono || 'Sin registrar'} />
-            <Dato etiqueta="Direccion" valor={cliente?.direccion || 'Sin registrar'} />
-          </View>
+        <Paso numero={2} titulo="Sucursal" detalle="Solo aparecen las que tienen stock de todo tu carrito">
+          {sucursales.length === 0 ? (
+            <AvisoEnLinea texto="Ninguna sucursal tiene stock para todo el carrito. Ajusta las cantidades." />
+          ) : (
+            <View style={estilos.opciones}>
+              {sucursales.map((s) => (
+                <Chip
+                  key={s.id_sucursal}
+                  texto={`${s.nombre} - ${s.ciudad}`}
+                  activo={idSucursal === s.id_sucursal}
+                  onPress={() => setIdSucursal(s.id_sucursal)}
+                />
+              ))}
+            </View>
+          )}
         </Paso>
 
-        <Paso numero={3} titulo="Sucursal de despacho" detalle="Desde aqui se prepara tu pedido">
+        <Paso numero={3} titulo="Forma de pago">
           <View style={estilos.opciones}>
-            {(sucursales ?? []).map((s) => (
-              <Chip
-                key={s.id_sucursal}
-                texto={`${s.nombre.replace('FashionStore ', '')} - ${s.ciudad}`}
-                activo={idSucursal === s.id_sucursal}
-                onPress={() => setIdSucursal(s.id_sucursal)}
+            <Chip texto="Tarjeta (Stripe)" activo={opcion === 'STRIPE'} onPress={() => setOpcion('STRIPE')} />
+            <Chip
+              texto="Contra entrega"
+              activo={opcion === 'CASH_ON_DELIVERY'}
+              onPress={() => setOpcion('CASH_ON_DELIVERY')}
+            />
+          </View>
+          {opcion === 'STRIPE' ? (
+            <Text style={estilos.nota}>
+              Pagas en el formulario seguro de Stripe (modo prueba). Tienes unos minutos para completar el pago antes de que
+              se liberen las prendas.
+            </Text>
+          ) : (
+            <View style={estilos.formulario}>
+              <Text style={estilos.nota}>Envio gratuito dentro de la ciudad de la sucursal. Pagas en efectivo al recibir.</Text>
+              <Campo etiqueta="Recibe" value={entrega.nombre} onChangeText={(nombre) => setEntrega((e) => ({ ...e, nombre }))} />
+              <Campo
+                etiqueta="Telefono"
+                keyboardType="phone-pad"
+                value={entrega.telefono}
+                onChangeText={(telefono) => setEntrega((e) => ({ ...e, telefono }))}
               />
-            ))}
-          </View>
+              <Campo
+                etiqueta="Direccion de entrega"
+                value={entrega.direccion}
+                multiline
+                onChangeText={(direccion) => setEntrega((e) => ({ ...e, direccion }))}
+              />
+            </View>
+          )}
         </Paso>
 
-        <Paso numero={4} titulo="Metodo de pago">
-          <View style={estilos.opciones}>
-            {METODOS.map((m) => (
-              <Chip key={m.valor} texto={m.texto} activo={metodo === m.valor} onPress={() => setMetodo(m.valor)} />
-            ))}
-          </View>
-          <Text style={estilos.nota}>{metodoElegido.nota}</Text>
-        </Paso>
-
+        {cotizacion.isError ? <AvisoEnLinea texto={cotizacion.error.message} /> : null}
         {error ? <AvisoEnLinea texto={error} /> : null}
       </ScrollView>
 
       <View style={estilos.pie}>
         <View style={estilos.filaTotal}>
           <Text style={estilos.totalEtiqueta}>Total a pagar</Text>
-          <Text style={estilos.totalValor}>{moneda(total)}</Text>
+          <Text style={estilos.totalValor}>
+            {cotizacion.data ? moneda(cotizacion.data.total) : cotizacion.isFetching ? 'Calculando...' : '-'}
+          </Text>
         </View>
         <Boton
-          titulo="Confirmar compra"
+          titulo={opcion === 'STRIPE' ? 'Continuar al pago' : 'Confirmar pedido'}
           icono="checkmark-circle-outline"
           ancho
-          onPress={confirmar}
-          cargando={registrar.isPending}
+          onPress={pedirConfirmacion}
+          cargando={confirmar.isPending}
+          deshabilitado={!cotizacion.data}
         />
       </View>
     </Pantalla>
   );
 }
 
-function Paso({
-  numero,
-  titulo,
-  detalle,
-  children,
-}: {
-  numero: number;
-  titulo: string;
-  detalle?: string;
-  children: React.ReactNode;
-}) {
+function Paso({ numero, titulo, detalle, children }: { numero: number; titulo: string; detalle?: string; children: React.ReactNode }) {
   return (
     <View style={estilos.paso}>
       <View style={estilos.pasoEncabezado}>
@@ -238,67 +319,40 @@ function Paso({
   );
 }
 
-function Dato({ etiqueta, valor }: { etiqueta: string; valor: string }) {
-  return (
-    <View style={estilos.dato}>
-      <Text style={estilos.datoEtiqueta}>{etiqueta}</Text>
-      <Text style={estilos.datoValor} numberOfLines={1}>
-        {valor}
-      </Text>
-    </View>
-  );
-}
-
-function Resultado({
-  venta,
-  navigation,
-}: {
-  venta: Venta;
-  navigation: PropsStack<'Checkout'>['navigation'];
-}) {
-  const pago = venta.pagos[0];
-  const rechazado = pago?.estado === EstadoPago.RECHAZADO;
-  const pendiente = pago?.estado === EstadoPago.PENDIENTE;
+function Resultado({ resultado, navigation }: { resultado: ResultadoCheckout; navigation: PropsStack<'Checkout'>['navigation'] }) {
+  const { venta, estado } = resultado;
+  const pagado = estado === 'COMPLETED' || estado === 'PAID';
+  const anulado = estado === 'CANCELLED' || estado === 'REFUNDED';
+  const titulo = pagado
+    ? 'Compra confirmada'
+    : anulado
+      ? 'El pago no se completo'
+      : venta.contra_entrega
+        ? 'Pedido registrado'
+        : 'Estamos confirmando tu pago';
+  const detalle = pagado
+    ? `Tu pedido #${venta.id_venta} por ${moneda(venta.total)} esta pagado.`
+    : anulado
+      ? `El pedido #${venta.id_venta} fue anulado y las prendas volvieron al stock.`
+      : venta.contra_entrega
+        ? `Tu pedido #${venta.id_venta} por ${moneda(venta.total)} se pagara en efectivo al recibirlo. La tienda te llamara para coordinar.`
+        : `Stripe todavia no confirma el pedido #${venta.id_venta}. Revisa su estado en Mis compras en unos minutos.`;
 
   return (
     <Pantalla bordes={['bottom']}>
       <View style={estilos.centro}>
-        <View
-          style={[
-            estilos.circuloResultado,
-            { backgroundColor: rechazado ? colores.errorSuave : colores.exitoSuave },
-          ]}
-        >
+        <View style={[estilos.circuloResultado, { backgroundColor: anulado ? colores.errorSuave : colores.exitoSuave }]}>
           <Ionicons
-            name={rechazado ? 'close-circle-outline' : pendiente ? 'time-outline' : 'checkmark-circle-outline'}
+            name={anulado ? 'close-circle-outline' : pagado ? 'checkmark-circle-outline' : 'time-outline'}
             size={34}
-            color={rechazado ? colores.error : colores.exito}
+            color={anulado ? colores.error : colores.exito}
           />
         </View>
-
-        <Text style={estilos.tituloResultado}>
-          {rechazado ? 'Pago rechazado' : pendiente ? 'Compra registrada' : 'Compra confirmada'}
-        </Text>
-        <Text style={estilos.detalleResultado}>
-          {rechazado
-            ? 'Tu pedido quedo registrado pero el pago no se completo. Puedes intentar con otro metodo desde tus compras.'
-            : pendiente
-              ? `Tu pedido #${venta.id_venta} espera la confirmacion del pago.`
-              : `Tu pedido #${venta.id_venta} por ${moneda(venta.total)} fue registrado.`}
-        </Text>
-
+        <Text style={estilos.tituloResultado}>{titulo}</Text>
+        <Text style={estilos.detalleResultado}>{detalle}</Text>
         <View style={estilos.accionesResultado}>
-          <Boton
-            titulo="Ver mis compras"
-            ancho
-            onPress={() => navigation.replace('Compras')}
-          />
-          <Boton
-            titulo="Seguir comprando"
-            variante="secundario"
-            ancho
-            onPress={() => navigation.navigate('Tabs')}
-          />
+          <Boton titulo="Ver mis compras" ancho onPress={() => navigation.replace('Compras')} />
+          <Boton titulo="Seguir comprando" variante="secundario" ancho onPress={() => navigation.navigate('Tabs')} />
         </View>
       </View>
     </Pantalla>
@@ -327,11 +381,8 @@ const estilos = StyleSheet.create({
   lineaNombre: { ...texto.cuerpo, fontWeight: '600', color: colores.tinta },
   lineaMeta: { ...texto.menor },
   lineaTotal: { ...texto.cuerpo, fontWeight: '600', color: colores.tinta },
-  datos: { gap: esp.s },
-  dato: { flexDirection: 'row', justifyContent: 'space-between', gap: esp.m },
-  datoEtiqueta: { ...texto.menor },
-  datoValor: { ...texto.cuerpo, flex: 1, textAlign: 'right', color: colores.tinta },
   opciones: { flexDirection: 'row', flexWrap: 'wrap', gap: esp.s },
+  formulario: { gap: esp.m },
   nota: { ...texto.menor, marginTop: esp.xs },
   pie: {
     paddingHorizontal: esp.l,
@@ -345,13 +396,7 @@ const estilos = StyleSheet.create({
   filaTotal: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   totalEtiqueta: { ...texto.subtitulo },
   totalValor: { ...texto.titulo, fontFamily: undefined, fontWeight: '700' },
-  centro: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: esp.xl,
-    gap: esp.s,
-  },
+  centro: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: esp.xl, gap: esp.s },
   circuloResultado: {
     width: 70,
     height: 70,

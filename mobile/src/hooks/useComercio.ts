@@ -5,11 +5,11 @@ import {
   reservasService,
   ventasService,
   type DatosReserva,
-  type DatosVenta,
   type FiltrosReserva,
   type FiltrosVenta,
   type LineaSeleccion,
 } from '../services/comercio.service';
+import { checkoutService, type PedidoCheckout } from '../services/checkout.service';
 import type { Carrito } from '../types/domain';
 import { useSesion } from '../context/SesionContext';
 import { claves } from './claves';
@@ -100,10 +100,11 @@ export function useCompras(filtros: FiltrosVenta = {}) {
   });
 }
 
-export function useRegistrarCompra() {
+/** Confirma el checkout: el backend convierte el carrito y aparta el stock. */
+export function useConfirmarCheckout() {
   const cliente = useQueryClient();
   return useMutation({
-    mutationFn: (datos: DatosVenta) => ventasService.registrar(datos),
+    mutationFn: (pedido: PedidoCheckout) => checkoutService.confirmar(pedido),
     onSuccess: () => {
       void cliente.invalidateQueries({ queryKey: claves.carrito });
       void cliente.invalidateQueries({ queryKey: ['ventas'] });

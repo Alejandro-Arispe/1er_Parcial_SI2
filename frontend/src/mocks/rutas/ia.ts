@@ -64,7 +64,11 @@ export const rutasIA: RutaMock[] = [
     handler: ({ body }): RespuestaAsistente => {
       const consulta = String(body?.mensaje ?? '').trim();
       const sugeridos = consulta ? sugerirPorTexto(consulta) : [];
-      return { respuesta: redactar(consulta, sugeridos.length), productos_sugeridos: sugeridos };
+      return {
+        respuesta: redactar(consulta, sugeridos.length),
+        productos_sugeridos: sugeridos,
+        origen: 'mock',
+      };
     },
   },
   {

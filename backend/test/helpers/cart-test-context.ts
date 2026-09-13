@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModuleBuilder } from '@nestjs/testing';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Client } from 'pg';
 import { hash } from 'bcrypt';
@@ -20,6 +20,8 @@ import { ResponseInterceptor } from '../../src/common/interceptors/response.inte
 export async function cartTestContext(
   databaseUrl: string,
   paymentGateway?: PaymentGatewayService,
+  /** Permite reemplazar proveedores externos, por ejemplo el de IA. */
+  configure?: (builder: TestingModuleBuilder) => void,
 ) {
   const schema = `cart_test_${randomUUID().replaceAll('-', '')}`;
   const sql = new Client({
@@ -156,6 +158,7 @@ export async function cartTestContext(
       .useValue({});
     if (paymentGateway)
       builder.overrideProvider(PaymentGatewayService).useValue(paymentGateway);
+    configure?.(builder);
     const module = await builder.compile();
     app = module.createNestApplication({ rawBody: true });
     app.setGlobalPrefix('api/v1');

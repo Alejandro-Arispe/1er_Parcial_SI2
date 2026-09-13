@@ -7,5 +7,6 @@ import { ReportsService } from './reports.service.js';
   imports: [PassportModule.register({ defaultStrategy: 'jwt' })],
   controllers: [ReportsController],
   providers: [ReportsRepository, ReportsService],
+  exports: [ReportsService],
 })
 export class ReportsModule {}

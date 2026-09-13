@@ -1,6 +1,6 @@
 # FashionStore: contexto y pendientes para continuar
 
-Actualizado: **13 de septiembre de 2026**, después de completar el portal de proveedor.
+Actualizado: **13 de septiembre de 2026 (tarde)**. Se completaron reportes y dashboard, IA (Gemini o local), notificaciones web y la dockerización para Azure.
 
 Este documento resume el trabajo de la conversación y lo comprobado en el repositorio. Sirve para retomar otra sesión; los pendientes no son una orden de ejecutarlos todos automáticamente. Confirmar qué etapa solicita el usuario y contrastar este estado con los cambios posteriores del código.
 
@@ -13,7 +13,8 @@ Este documento resume el trabajo de la conversación y lo comprobado en el repos
 - El usuario también pidió completar una lista ampliada: POS con turnos/arqueo, fotos múltiples, mayoristas, contra entrega, PWA y ventas offline, chatbot/recomendaciones, reportes por voz/texto con IA, responsive y RA.
 - La fecha de entrega mencionada en la conversación fue **23 de septiembre**. No dar por actualizada esa fecha si la sesión se retoma después.
 - No usar CMS ni frameworks de e-commerce prediseñados. El examen solicita **despliegue en Azure**.
-- **IA se dejó para el final**. No está implementada por el hecho de existir carpetas o pantallas.
+- IA: el proveedor actual es **Gemini** y el diseño permite cambiar a una **IA local (Ollama)** solo con variables de entorno.
+- Prioridad acordada para lo que falta: **backend → frontend → mobile**. Mobile se adapta al backend; no se cambian back ni front por mobile.
 
 ### Decisiones ya resueltas: no volver a diseñarlas desde cero
 
@@ -27,6 +28,8 @@ Este documento resume el trabajo de la conversación y lo comprobado en el repos
 | Stripe | Solo modo prueba. PaymentIntents y Payment Element en React; retiro en la sucursal seleccionada. |
 | Contra entrega | Envío gratuito para la demo dentro de la ciudad de la sucursal; nombre, teléfono y dirección; coordinación por teléfono. Se registra la entrega y el efectivo recibido en un turno propio. |
 | Proveedor | Edición directa de información de productos propios. Administración crea/asigna productos y controla precios, publicación, fotos, variantes y stock. No se implementó un circuito de propuestas/aprobaciones. |
+| IA | `AI_PROVIDER=gemini\|ollama\|none`. La clave solo vive en backend. Si el proveedor falla, se responde con reglas y se informa `source: rules`. La IA de reportes elige filtros de una lista blanca, nunca SQL. |
+| Despliegue | Imágenes Docker: API NestJS y web con nginx, que reenvía `/api` a la API en el mismo origen. En Azure: Container Apps, PostgreSQL Flexible Server y ACR. Ollama solo en local. |
 
 ## 2. Qué ya está implementado
 
@@ -46,6 +49,23 @@ Estas etapas tienen código integrado y pruebas; no equivalen a haber ensayado t
 - [x] Checkout web con Stripe: crear/retomar pago, confirmación en backend, cancelación, vencimiento y conciliación/reembolso de cobros tardíos.
 - [x] Contra entrega: pedido pendiente con stock apartado, datos de entrega, cancelación y confirmación de entrega/cobro que actualiza stock, pago y turno juntos.
 - [x] Proveedor: vínculo cuenta-proveedor en Usuarios, fichas propias, información de suministro, temporada/colección y entregas programadas. Propiedad y permisos validados por backend.
+- [x] Reportes y dashboard en React con `/reports/*` reales:
+  - Ventas por día, sucursal y canal; ranking; inventario paginado; reservas por estado.
+  - Días en Bolivia y monedas separadas.
+  - El encargado ve `/sucursal/reportes`, limitado a su sucursal.
+- [x] IA en backend y React:
+  - `/ai/status`, `/ai/assistant`, `/ai/recommendations` (guarda en `recomendaciones_ia`) y `/ai/reports`.
+  - Página "Reportes con IA" con dictado de voz (Web Speech API) y texto como alternativa.
+- [x] Notificaciones web:
+  - Campana con contador que se actualiza cada 30 s, lista, "solo sin leer", marcar como leída y aviso toast.
+  - Abre la reserva con `?reserva=ID`.
+- [x] Cierre de huecos (13/09):
+  - Reportes por hora (`hourly` en `/reports/sales`) y por caja o turno (`/reports/cash-shifts`), en React y en los reportes con IA.
+  - `PATCH /auth/me` para editar nombre, teléfono y dirección, con "Mi perfil" en la web y edición en el perfil móvil.
+  - Pruebas e2e de IA, modelos 3D y perfil.
+- [x] Docker:
+  - `docker-compose.yml` con db, backend, frontend y el perfil `ia-local` (Ollama).
+  - Dockerfiles, nginx y guía [despliegue en Azure](docs/despliegue-azure.md).
 
 ### Guías de las etapas terminadas
 
@@ -55,173 +75,156 @@ Estas etapas tienen código integrado y pruebas; no equivalen a haber ensayado t
 - [Ventas offline y PWA](backend/docs/ventas-offline.md)
 - [Checkout Stripe y contra entrega](backend/docs/checkout-react.md)
 - [Portal de proveedor](backend/docs/proveedor-react.md)
+- [Inteligencia artificial](backend/docs/ia.md)
+- [Despliegue en Azure](docs/despliegue-azure.md)
 - [README del frontend](frontend/README.md)
 
 Algunas guías describen el estado al terminar una etapa anterior. Para saber qué sigue pendiente, usar este resumen y comprobar el código actual.
 
 ## 3. Pendientes por orden recomendado
 
-### Etapa 1 — Reportes tradicionales y dashboard de React
+### Etapa A — Clave de Gemini y prueba con el modelo real
 
-**Es la siguiente etapa recomendada.** El backend ya tiene reportes; React conserva rutas y estructuras de la demo.
+- [x] Clave pegada en `backend/.env` por el usuario. La clave compartida en la conversación del 13/09 debe **rotarse** antes de producción.
+- [x] Modelo `gemini-3.6-flash`. `gemini-2.5-flash` responde 404 porque ya no se habilita para cuentas nuevas. Los modelos 3.x rechazan `thinkingBudget`, así que el proveedor solo lo envía a 2.5 Flash.
+- [x] Verificado por la web en Docker (`:8080`):
+  - `/ai/status` responde `configured: true`.
+  - El asistente responde con `source: gemini` en unos 4,5 s.
+  - Las recomendaciones responden con `source: gemini:gemini-3.6-flash`.
+- [ ] Ensayar en el navegador los reportes con IA por voz y las recomendaciones de cliente autenticado.
+- Corrección: el `.env` de la raíz tenía `PUBLIC_API_URL=http://localhost:3000/api/v1`. La web del 8080 llamaba al 3000 y CORS bloqueaba las solicitudes. Ahora es `/api/v1` y `API_PORT=3001`, para no chocar con `npm run start:dev`.
+- [ ] Opcional, IA local: `docker compose --profile ia-local up -d`, `ollama pull qwen2.5:3b`, `AI_PROVIDER=ollama` y `AI_TIMEOUT_MS=60000`.
 
-- [ ] Adaptar servicios, tipos, hooks, gráficas e indicadores de React a los contratos reales.
-- [ ] Mostrar ventas por período/sucursal/canal, productos más vendidos, inventario crítico y reservas por estado según lo que realmente devuelve NestJS.
-- [ ] Construir el dashboard con esos datos. No inventar un endpoint de resumen ni indicadores que el servidor no proporciona.
-- [ ] Respetar permisos: administrador global; encargado solo su sucursal. El backend actualmente no autoriza estos reportes a cajeros, clientes ni proveedores.
-- [ ] Verificar qué ventas entran en cada total: completadas, Stripe, contra entrega cobrada y offline sincronizada. No sumar pedidos pendientes como ingresos.
-- [ ] Revisar fecha utilizada, zona horaria, moneda y límites de período. Los DTO actuales usan `from`/`to` como días `YYYY-MM-DD`; la consulta por horas/caja que aparece en la lista ampliada requerirá analizar una ampliación puntual.
-- [ ] Probar filtros, paginación, datos vacíos, errores y coincidencia de totales con ventas reales de prueba.
+### Etapa B — Despliegue real en Azure
 
-**Puntos de partida:**
+La configuración ya está lista: [guía](docs/despliegue-azure.md), Dockerfiles y compose. **No se crearon recursos en Azure**: requieren la cuenta del usuario y tienen costo.
 
-- [Controlador de reportes](backend/src/modules/reports/reports.controller.ts)
-- [DTO de filtros](backend/src/modules/reports/dto/report-query.dto.ts)
-- [Guía del backend](backend/docs/reportes.md)
-- [Servicio React pendiente](frontend/src/services/reportes.service.ts)
-- [Dashboard](frontend/src/features/admin/PaginaDashboard.tsx)
-- [Pantalla de reportes](frontend/src/features/reports/PaginaReportes.tsx)
+- [ ] Confirmar suscripción, región y presupuesto.
+- [ ] Crear ACR, PostgreSQL Flexible Server y las Container Apps de API y web, siguiendo la guía.
+- [ ] Guardar como secretos `DATABASE_URL` (con `sslmode=require`), `JWT_SECRET`, `GEMINI_API_KEY`, Stripe y Cloudinary.
+- [ ] Cargar la semilla DEMO, configurar el webhook de Stripe con la URL pública y probar la PWA por HTTPS.
 
-Rutas existentes: `GET /reports/sales`, `/reports/top-products`, `/reports/inventory`, `/reports/reservations`. No son las rutas antiguas `/reportes/...` del frontend. Revisar las respuestas completas antes de adaptar la UI.
+### Etapa C — Mobile adaptado al backend (hecha el 13/09, falta probar en teléfono)
 
-### Etapa 2 — Notificaciones de reservas en React
+Prioridad acordada: backend → frontend → mobile. Mobile se adaptó a los contratos actuales.
 
-El backend ya registra notificaciones de reservas para la sucursal; falta completar su integración web.
+- [x] Capa de red:
+  - `mobile/src/api/http.ts` desenvuelve `{ success, data }` y traduce los errores.
+  - Adaptadores en `src/api/*.contratos.ts`, portados de la web.
+  - Los mocks siguen disponibles con `EXPO_PUBLIC_USE_MOCKS=true`.
+- [x] Servicios reales:
+  - acceso;
+  - catálogo con filtros en memoria;
+  - disponibilidad pública;
+  - carrito;
+  - reservas y compras propias (`/mine`);
+  - IA (asistente con historial y recomendaciones públicas o personalizadas).
+- [x] Checkout móvil (canal `MOBILE`):
+  - sucursal con stock, cotización `quoteHash` e idempotencia;
+  - **Stripe con Stripe.js en un WebView** (funciona en Expo Go) o **contra entrega**;
+  - consulta periódica hasta que NestJS confirma el pago.
+- [x] Probador RA (decisión: **RA en el teléfono, sin IA**):
+  - Backend: `GET/POST /products/:id/ar-resources` y `DELETE /products/:id/ar-resources/:resourceId` (alta y baja solo administrador; se desactiva, no se borra).
+  - Web: sección "Probador virtual (RA)" en el formulario de producto para registrar la URL del GLB/GLTF/USDZ.
+  - Mobile: el visor 3D y "Ver en tu espacio" leen esos recursos; el modo cámara funciona con la foto de cualquier prenda.
+- [x] `mobile/.env`: `EXPO_PUBLIC_API_URL=http://192.168.100.140:3000/api/v1` (IP de la PC en la Wi-Fi), mocks apagados. Cambiar si cambia la red.
+- [ ] Probar en un teléfono con Expo Go:
+  - login;
+  - carrito y checkout Stripe y contra entrega;
+  - reservas;
+  - asistente;
+  - cámara, galería y visor 3D con un modelo registrado.
+  - Si no conecta, permitir el puerto 3000 en el firewall de Windows (lo hace el usuario).
+- [ ] Registrar al menos un modelo 3D real de prenda para la demo. La base no tiene ninguno; la prueba de contratos creó uno de ejemplo y lo desactivó.
+- Nota: `VirtualFittingController` sigue vacío. La RA no necesita lógica de servidor además del registro de recursos.
 
-- [ ] Conectar listado, contador de no leídas y acción de marcar como leída.
-- [ ] Mostrar el aviso al personal autorizado y permitir abrir la reserva relacionada.
-- [ ] Respetar la sucursal del encargado y el estado de lectura individual por usuario.
-- [ ] Usar actualización periódica sencilla si basta para la demo; no introducir infraestructura adicional sin necesidad.
-- [ ] Probar que una nueva reserva aparece, que leerla actualiza el contador y que otro usuario conserva su propio estado de lectura.
+### Etapa D — Ensayo general, responsive y entrega
 
-Rutas reales: `GET /notifications`, `GET /notifications/unread-count`, `PATCH /notifications/:id/read`. Roles actuales: administrador y encargado. Filtros: `branchId`, `page`, `limit`, `unreadOnly` como cadena `'true'`/`'false'`.
+- [ ] Datos coherentes de demo: varias sucursales, stock por variante, fotos, cliente mayorista, reserva, cajero con turno y proveedor vinculado.
+- [ ] Recorridos con la API real: catálogo → carrito → Stripe; reserva → notificación → preparación → venta; contra entrega; offline; proveedor; reportes y reportes con IA por voz.
+- [ ] Revisar escritorio y móvil, errores de red y navegación por rol. El dictado solo funciona en Chrome o Edge; en otros navegadores se escribe.
+- [ ] Matriz de requisitos de `Examen.md`: cumplido, simplificado, pendiente o no verificado.
+- [ ] Guion de demostración.
 
-Consultar [guía de notificaciones](backend/docs/notificaciones.md) y [controlador](backend/src/modules/notifications/notifications.controller.ts).
+## 4. Mobile y realidad aumentada
 
-### Etapa 3 — IA: asistente y recomendaciones
-
-**Pendiente real de backend y frontend.** `AiController` no tiene rutas; `AiService` y `RecommendationService` son estructuras sin funcionalidad. Las llamadas `/ia/asistente` y `/ia/recomendaciones` de React son contratos esperados de la demo.
-
-- [ ] Elegir/configurar el proveedor de IA en backend. React menciona Gemini, pero eso no prueba que exista una integración.
-- [ ] Implementar el asistente con datos reales del catálogo: materiales/cuidados si están registrados, combinaciones y disponibilidad. Evitar inventar características ausentes.
-- [ ] Conectar recomendaciones a productos existentes y disponibles; mostrar su motivo.
-- [ ] Mantener las claves solo en backend, validar entradas y manejar demora/error del proveedor.
-- [ ] Probar al menos una funcionalidad real de IA exigida por RF25, además de la experiencia ampliada acordada.
-
-Archivos: [módulo IA](backend/src/modules/ai/ai.module.ts), [servicio React](frontend/src/services/ia.service.ts), [asistente](frontend/src/features/ia/AsistenteIA.tsx).
-
-### Etapa 4 — Reportes generativos por texto y voz con IA
-
-Esto pertenece a la lista ampliada del usuario; todavía no está implementado.
-
-- [ ] Permitir escribir una solicitud de reporte en lenguaje natural.
-- [ ] Añadir entrada por voz y alternativa escrita cuando el navegador no permita dictado o el micrófono falle.
-- [ ] Convertir la solicitud en una consulta de lectura controlada sobre datos reales, respetando rol/sucursal y límites de consulta. No ejecutar SQL arbitrario generado por el modelo.
-- [ ] Mostrar filtros interpretados y resultados en tabla/gráfica, con totales verificables.
-- [ ] Si se requieren consultas por hora, caja o turno, ampliar los contratos necesarios de forma acotada.
-- [ ] Ensayar ejemplos reproducibles con datos de presentación. No presentar una respuesta estática como IA funcional.
-
-Conviene construir esta etapa sobre los reportes tradicionales ya conectados.
-
-### Etapa 5 — Azure y configuración de presentación
-
-**Examen.md exige Azure. No se ha comprobado un despliegue funcional allí en esta conversación.** La presencia de `npm run deploy` en backend no demuestra que esté desplegado.
-
-- [ ] Comprobar si ya existen recursos de Azure y decidir el alojamiento mínimo de React, NestJS y PostgreSQL.
-- [ ] Preparar configuración de despliegue, variables, migraciones, HTTPS, CORS y rutas de la SPA.
-- [ ] Configurar el webhook de Stripe con la URL publicada; mantener modo prueba.
-- [ ] Verificar Cloudinary con la cuenta real y una subida visible. Su implementación está hecha, pero no se certificó aquí una subida real con las credenciales del usuario.
-- [ ] Probar login, compras, reservas, permisos, proveedor y PWA desde la dirección publicada.
-
-Revisar Azure y cuentas disponibles antes del último día. El despliegue debe coordinarse con el usuario; este archivo no autoriza por sí solo crear recursos de pago ni publicar cambios.
-
-### Etapa 6 — Ensayo general, responsive y entrega
-
-- [ ] Preparar datos coherentes de demo: varias sucursales, stock por variantes, fotos, cliente mayorista, reserva, cajero con turno y cuenta de proveedor vinculada.
-- [ ] Recorrer con API real: catálogo → carrito → Stripe; reserva → prueba → venta parcial; contra entrega → cobro; offline → reconexión → cierre; proveedor → ficha → entrega programada.
-- [ ] Comprobar que inventario, pagos, turnos, comprobantes y reportes coinciden.
-- [ ] Revisar escritorio y pantallas pequeñas, errores de red, carga, formularios y navegación por rol.
-- [ ] Ensayar offline en el navegador de la presentación con el build/PWA, incluyendo recarga. Probar Stripe en su formulario visible; las pruebas de DOM usan un SDK simulado.
-- [ ] Completar una matriz de requisitos de `Examen.md` y de la lista ampliada: cumplido, simplificado, pendiente o no verificado.
-- [ ] Preparar el guion de demostración y comprobar acceso a internet, backend, base de datos y servicios externos.
-
-## 4. Mobile y realidad aumentada: fuera del alcance revisado
-
-- El usuario pidió expresamente no revisar mobile; no se inspeccionó ni modificó para estas etapas.
-- **No afirmar que mobile/RA está terminado ni que no existe:** su estado no fue auditado aquí.
-- El examen sí incluye aplicación React Native y probador con RA; para afirmar cumplimiento completo del sistema habrá que verificarlos en una etapa que el usuario autorice.
-- El soporte de referencias a recursos RA en el catálogo web no equivale a tener un probador con cámara funcionando.
+- `mobile/` ya está conectado a la API real y compila (typecheck), pero **no se probó en un teléfono**: no afirmar que la RA o el pago móvil funcionan en hardware hasta ensayarlos.
+- El probador no detecta el cuerpo. Tiene dos modos: la foto de la prenda superpuesta en la cámara, y el modelo 3D colocado en el espacio (ARCore o AR Quick Look). La app lo aclara en pantalla.
 
 ## 5. Límites del MVP que no son nuevas tareas obligatorias
 
-Conservar estas simplificaciones salvo que el usuario solicite cambiarlas o una revisión del examen lo haga necesario:
+Conservar estas simplificaciones salvo que el usuario pida cambiarlas:
 
-- Un almacén por sucursal. No hay varios depósitos dentro de una sucursal ni traslados entre depósitos.
-- En POS, tarjeta/QR/transferencia son registro de un pago externo con referencia; no equivalen a integración bancaria automática. Stripe es la pasarela web implementada.
-- Contra entrega no incluye empresa de transporte, seguimiento de repartidor ni gestión de tarifas.
-- El proveedor actualiza fichas asignadas; los productos nuevos se crean desde administración. No existe aprobación de propuestas.
-- La disponibilidad informada por proveedor es una nota de suministro, no inventario vendible de la tienda.
-- Offline solo cubre efectivo/consumidor final. Requiere preparar la descarga y abrir turno con conexión. No contempla apertura/cierre offline, pagos electrónicos offline ni sincronización con navegador cerrado.
-- Offline conserva precios de la descarga durante 24 horas para registrar tickets. Conflictos de stock retienen el ticket y requieren revisar existencias; no se inventa stock ni se elimina el cobro.
-- El respaldo offline se exporta a JSON; no hay pantalla de importación. No borrar datos del sitio con ventas pendientes.
-- Hay cancelación de pedidos digitales pendientes y conciliación/reembolso tardío de Stripe. No se implementó una gestión general de devoluciones/reembolsos de ventas pagadas.
-- Algunos filtros de catálogo/inventario se resuelven recorriendo páginas en React. Optimización para catálogos grandes es una mejora posterior, no la prioridad de la demo.
-- El historial de ajustes de inventario no conserva explícitamente valor anterior/final; una ampliación de auditoría sería otra mejora.
+- Un almacén por sucursal. No hay varios depósitos por sucursal ni traslados entre depósitos.
+- En POS, tarjeta, QR y transferencia registran un pago externo con referencia; no hay integración bancaria automática. Stripe es la pasarela web.
+- Contra entrega no incluye transportista, seguimiento ni tarifas.
+- El proveedor actualiza fichas asignadas; los productos nuevos se crean desde administración. No hay aprobación de propuestas.
+- La disponibilidad informada por el proveedor es una nota, no inventario vendible.
+- Offline cubre solo efectivo y consumidor final, con descarga previa y turno abierto con conexión. No hay apertura ni cierre offline, pagos electrónicos offline ni sincronización con el navegador cerrado.
+- Offline conserva precios de la descarga durante 24 horas. Si hay conflicto de stock, el ticket queda retenido.
+- El respaldo offline se exporta a JSON; no hay pantalla de importación.
+- No hay gestión general de devoluciones o reembolsos de ventas pagadas, fuera de la conciliación tardía de Stripe.
+- Algunos filtros de catálogo e inventario recorren páginas en React.
+- El historial de ajustes de inventario no guarda el valor anterior ni el final.
+- Reportes por día, con desglose por hora local y reporte de turnos y cajas (`/reports/cash-shifts`), también disponibles desde los reportes con IA.
+- La vista consolidada de inventario muestra disponibles, reservadas, agotadas y por ingresar. Las unidades **vendidas** están en los reportes de ventas y ranking, no por variante dentro del inventario.
+- El proveedor edita los productos que tiene asignados; los productos nuevos los crea el administrador.
+- Notificaciones por consulta periódica cada 30 s, sin sockets ni push. Solo avisan reservas nuevas a administradores y encargados. La demo con mocks no las simula.
+- El límite de solicitudes de IA vive en memoria por instancia; en Azure hay una sola réplica de la API.
 
 ## 6. Entorno y precauciones al retomar
 
-- Repositorio: `D:\UNIVERSIDAD\SI2\examen_1er\1er_Parcial_SI2`.
+- Repositorio actual: `C:\Users\aleja\OneDrive\Documentos\Universidad\SI2\1er_Parcial_SI2`, rama `Alejandro`. El trabajo de esta sesión **no se ha commiteado**. Revisar `git status` y conservar los cambios.
 - Backend: NestJS, Prisma y PostgreSQL. Frontend: React, TypeScript, Vite y TanStack Query.
-- Entorno usado: Windows, PowerShell. API habitual: `http://localhost:3000/api/v1`; React: `http://localhost:5173`.
-- PostgreSQL local comprobado en `localhost:5433`, base `tienda_ropa`. Usar las variables existentes; no copiar contraseñas, tokens ni claves al documento o al chat.
-- `VITE_USE_MOCKS=false` y `VITE_API_URL` apuntando a NestJS. Las cuentas mock del README no son automáticamente cuentas reales de PostgreSQL.
-- **Hay numerosos cambios sin commit de varias etapas.** Antes de editar, revisar `git status`; conservarlos. No restaurar archivos ni limpiar el árbol como si fueran cambios descartables. No se hicieron commits en estas etapas.
-- No se encontró `AGENTS.md` en las búsquedas realizadas. Comprobar si aparece uno nuevo al retomar.
-- No ejecutar semillas generales para “empezar de nuevo” sobre la base de demo sin revisar sus efectos. Las pruebas HTTP usan esquemas temporales aislados.
+- PostgreSQL de desarrollo en Docker, contenedor `fashionstore-db-1`, `localhost:5433`, bases `tienda_ropa` y `tienda_ropa_test`.
+  - La contraseña local se generó y está en el `.env` de la raíz y en `backend/.env`; no copiarla.
+  - En Windows hay otro PostgreSQL 17 como servicio en 5432; no se tocó.
+- Se cargó la semilla DEMO el 13/09 (referencia 2026-09-13): 3 sucursales, 12 productos, 30 ventas, 7 reservas y 7 notificaciones.
+  - `SEED_DEMO_PASSWORD` quedó en `backend/.env`.
+  - La contraseña del administrador es la de `SEED_ADMIN_PASSWORD`.
+- `frontend/.env`: `VITE_USE_MOCKS=false`, `VITE_API_URL=http://localhost:3000/api/v1`.
+- Dependencias instaladas con `npm ci` en backend y frontend. OneDrive sincroniza `node_modules`; conviene pausar la sincronización o excluir esas carpetas.
+- No ejecutar semillas generales para "empezar de nuevo" sin revisar sus efectos.
 
 ### Migraciones y pruebas conocidas
 
-Hasta la última etapa se aplicaron **11 migraciones** en la base local, incluyendo:
+Siguen siendo **11 migraciones**. Esta etapa no agregó ninguna: IA usa la tabla existente `recomendaciones_ia`. No modificar migraciones aplicadas.
 
-1. `20260915000000_catalog_foundation`
-2. `20260916000000_cash_shifts`
-3. `20260917000000_offline_sales`
-4. `20260918000000_cash_on_delivery`
-5. `20260919000000_supplier_portal`
+Verificaciones del 13/09:
 
-No modificar migraciones aplicadas para añadir una etapa nueva. En otro entorno ejecutar las pendientes y regenerar Prisma.
+| Área | Resultado |
+|---|---|
+| Backend unitarias | 184 correctas (37 archivos) |
+| Backend HTTP e2e | 106 correctas (13 archivos, `TEST_DATABASE_URL` en Docker). Incluye IA con proveedor falso, modelos 3D, perfil propio, ventas por hora y turnos de caja |
+| Frontend | 149 correctas (26 archivos, con render de dashboard, reportes, reportes con IA y campana), `tsc -b` y build/PWA correctos |
+| Mobile | `tsc --noEmit` correcto; contratos verificados contra la API por IP de red |
+| Lint | Frontend: 7 avisos que ya existían. Backend: limpio |
+| Contratos contra la API real | Reportes (admin, encargado limitado, 403 del cajero) y `/ai/*` con respaldo de reglas |
+| Docker (`docker compose up -d --build`) | Imágenes construidas. API *healthy* con migraciones automáticas. nginx sirve la SPA (respaldo a `index.html`, `sw.js` sin caché) y reenvía `/api` correctamente |
 
-Últimas comprobaciones relevantes: 166 pruebas unitarias de backend; 8 HTTP del portal de proveedor; 26 pruebas React enfocadas en proveedor/contratos/administración, todas correctas. También se probaron en etapas anteriores ventas, reservas, turnos, offline y checkout. La API real de Stripe **en modo prueba** pasó pago normal, idempotencia y reembolso tardío. Builds de backend y frontend/PWA correctos al cerrar proveedor. Hay 7 avisos de lint preexistentes en React y ningún error de lint; no confundir esto con una validación visual integral.
+`tsc --noEmit` del backend ya tenía errores de tipos en `prisma/seed-sales.ts` y `src/modules/auth/auth.service.spec.ts`. No bloquean `nest build` ni las pruebas.
 
-Comandos habituales, desde la carpeta de cada aplicación:
+Comandos habituales (desde cada carpeta):
 
 ```powershell
+# Base de datos (raiz)
+docker compose up -d db
 # Backend
-npm run build
-npm test
 npm run start:dev
-# HTTP: requiere TEST_DATABASE_URL apuntando a una base local de prueba.
-npm run test:e2e
-
+npm test
+$env:TEST_DATABASE_URL = '<valor de TEST_DATABASE_URL en backend/.env>'; npm run test:e2e -- --no-file-parallelism
 # Frontend
+npm run dev
 npm test
 npm run build
-npm run dev
+# Pila completa en contenedores (raiz): web en http://localhost:8080
+docker compose up -d --build
 ```
 
-Para PWA/offline, detener `dev` en el puerto 5173 y usar:
-
-```powershell
-npm run build
-npm run preview -- --port 5173 --strictPort
-```
-
-El service worker se genera en el build. Usar localhost o HTTPS y navegador compatible con Web Locks. Cerrar pestañas viejas si no se activa la nueva versión de la PWA.
-
-En este entorno se observó `spawn EPERM` al ejecutar Vite/Prisma bajo sandbox. Algunas ejecuciones necesitaron la escalación de la herramienta, que fue aprobada. No era un fallo del código. Si reaparece, leer el error y usar el mecanismo de permisos disponible; no desactivar validaciones ni falsear resultados de pruebas.
+Para PWA offline sin Docker: `npm run build` y `npm run preview -- --port 5173 --strictPort`.
 
 ## 7. Mensaje sugerido para abrir otra sesión
 
-> Lee CONTEXTO_Y_PENDIENTES.md y comprueba el estado actual del repositorio. Continuamos con FashionStore, una demo académica sencilla. No revises ni modifiques mobile. Conserva los cambios existentes y prioriza adaptar React al backend. La siguiente etapa recomendada es conectar reportes tradicionales y dashboard; después notificaciones, IA y preparación final/Azure. No rehagas las etapas ya terminadas.
+> Lee CONTEXTO_Y_PENDIENTES.md y comprueba el estado del repositorio. FashionStore es una demo académica. Prioridad: backend → frontend → mobile (mobile se adapta al backend). Ya están hechos reportes y dashboard, IA (Gemini o Ollama), notificaciones web y Docker para Azure. Siguen: probar con la clave real de Gemini, desplegar en Azure con el usuario, adaptar mobile y RA, y hacer el ensayo general. Conserva los cambios existentes y no rehagas etapas terminadas.
 
-Actualizar este archivo al completar la siguiente etapa, especialmente los pendientes, migraciones aplicadas y verificaciones reales.
+Actualizar este archivo al completar cada etapa.

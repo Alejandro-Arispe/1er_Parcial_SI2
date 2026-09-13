@@ -21,7 +21,7 @@ export default function PaginaProducto() {
   const { autenticado, esCliente, usuario } = useAuth();
 
   const consulta = useProducto(idProducto);
-  const recomendaciones = useRecomendaciones({ limite: 4 });
+  const recomendaciones = useRecomendaciones({ limite: 4, id_producto: idProducto }, idProducto > 0);
   const agregar = useAgregarAlCarrito();
   const carrito = useCarrito();
   const cambiandoCarrito = useIsMutating({ mutationKey: ['carrito', 'cambio'] }) > 0;
@@ -294,7 +294,12 @@ export default function PaginaProducto() {
             {recomendaciones.data
               .filter((r) => r.producto && r.id_producto !== idProducto)
               .map((r) => (
-                <TarjetaProducto key={r.id_recomendacion} producto={r.producto!} />
+                <div key={r.id_recomendacion} className="fs-pila" style={{ gap: 6 }}>
+                  <TarjetaProducto producto={r.producto!} />
+                  <p className="fs-sub" style={{ fontSize: '0.8rem' }}>
+                    {r.motivo}
+                  </p>
+                </div>
               ))}
           </div>
         </section>

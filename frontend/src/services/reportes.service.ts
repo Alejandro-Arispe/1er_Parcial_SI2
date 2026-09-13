@@ -1,43 +1,64 @@
 /**
- * Indicadores y reportes. Son proyecciones sobre ventas, inventario y reservas;
- * el backend es quien las calcula.
- * Endpoints esperados:
- *   GET /reportes/resumen
- *   GET /reportes/ventas-por-periodo
- *   GET /reportes/ventas-por-sucursal
- *   GET /reportes/top-productos
- *   GET /reportes/inventario-critico
- *   GET /reportes/reservas-por-estado
+ * Indicadores y reportes. NestJS calcula los agregados y limita al encargado
+ * a su sucursal; aqui solo se traducen filtros y respuestas.
+ *   GET /reports/sales
+ *   GET /reports/top-products
+ *   GET /reports/inventory
+ *   GET /reports/reservations
  */
 import { api } from '../api/http';
 import { endpoints } from '../api/endpoints';
-import type { Inventario } from '../types/domain';
-import type {
-  ConteoPorEstado,
-  FiltroReporte,
-  PuntoPeriodo,
-  ResumenIndicadores,
-  TopProducto,
-  TotalPorSucursal,
-} from '../types/reportes';
+import {
+  adaptarReporteCaja,
+  type ReporteCajaBackend,
+  adaptarReporteInventario,
+  adaptarReporteVentas,
+  adaptarReservasPorEstado,
+  adaptarTopProductos,
+  filtrosInventarioApi,
+  filtrosReporteApi,
+  type ReporteInventarioBackend,
+  type ReporteReservasBackend,
+  type ReporteVentasBackend,
+  type TopProductosBackend,
+} from '../api/reportes.contratos';
+import type { FiltroInventarioReporte, FiltroReporte } from '../types/reportes';
 
 export const reportesService = {
-  resumen(filtros: FiltroReporte = {}) {
-    return api.get<ResumenIndicadores>(endpoints.reportes.resumen, filtros);
+  async ventas(filtros: FiltroReporte = {}) {
+    return adaptarReporteVentas(
+      await api.get<ReporteVentasBackend>(endpoints.reportes.ventas, filtrosReporteApi(filtros)),
+    );
   },
-  ventasPorPeriodo(filtros: FiltroReporte = {}) {
-    return api.get<PuntoPeriodo[]>(endpoints.reportes.ventasPorPeriodo, filtros);
+  async topProductos(filtros: FiltroReporte & { limite?: number } = {}) {
+    const { limite, ...resto } = filtros;
+    return adaptarTopProductos(
+      await api.get<TopProductosBackend>(endpoints.reportes.topProductos, {
+        ...filtrosReporteApi(resto),
+        limit: limite,
+      }),
+    );
   },
-  ventasPorSucursal(filtros: FiltroReporte = {}) {
-    return api.get<TotalPorSucursal[]>(endpoints.reportes.ventasPorSucursal, filtros);
+  async inventario(filtros: FiltroInventarioReporte = {}) {
+    return adaptarReporteInventario(
+      await api.get<ReporteInventarioBackend>(
+        endpoints.reportes.inventario,
+        filtrosInventarioApi(filtros),
+      ),
+    );
   },
-  topProductos(filtros: FiltroReporte & { limite?: number } = {}) {
-    return api.get<TopProducto[]>(endpoints.reportes.topProductos, filtros);
+  async caja(filtros: FiltroReporte & { id_caja?: number } = {}) {
+    const { canal: _canal, id_caja, ...resto } = filtros;
+    const { channel: _channel, ...params } = filtrosReporteApi(resto);
+    return adaptarReporteCaja(
+      await api.get<ReporteCajaBackend>(endpoints.reportes.caja, { ...params, registerId: id_caja }),
+    );
   },
-  inventarioCritico(filtros: FiltroReporte & { umbral?: number; limite?: number } = {}) {
-    return api.get<Inventario[]>(endpoints.reportes.inventarioCritico, filtros);
-  },
-  reservasPorEstado(filtros: FiltroReporte = {}) {
-    return api.get<ConteoPorEstado[]>(endpoints.reportes.reservasPorEstado, filtros);
+  async reservasPorEstado(filtros: FiltroReporte = {}) {
+    const { canal: _canal, ...resto } = filtros;
+    const { channel: _channel, ...params } = filtrosReporteApi(resto);
+    return adaptarReservasPorEstado(
+      await api.get<ReporteReservasBackend>(endpoints.reportes.reservas, params),
+    );
   },
 };

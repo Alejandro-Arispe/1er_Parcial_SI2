@@ -5,8 +5,9 @@ React Native + Expo + TypeScript. Esta orientada al **cliente**: catalogo,
 carrito, compra, reservas para probar en tienda, historial, asistente de IA y
 probador virtual.
 
-El backend NestJS lo desarrolla otro integrante del equipo. El proyecto ya esta
-preparado para conectarse a el sin reescribir pantallas.
+La app consume la API NestJS real (`/api/v1`). Se adapto a sus contratos sin
+cambiar el backend: los DTO en ingles se traducen al dominio en espanol en
+`src/api/*.contratos.ts`.
 
 La app no es un panel administrativo: la gestion de catalogo, inventario,
 caja y reportes vive en el frontend web.
@@ -54,25 +55,28 @@ dispositivo. Esas tres cosas se prueban con Expo Go.
 Copiar `.env.example` a `.env`:
 
 ```
-EXPO_PUBLIC_API_URL=http://localhost:3000/api
-EXPO_PUBLIC_USE_MOCKS=true
+EXPO_PUBLIC_API_URL=http://192.168.0.12:3000/api/v1
+EXPO_PUBLIC_USE_MOCKS=false
 ```
 
-`EXPO_PUBLIC_USE_MOCKS=false` hace que todas las peticiones salgan hacia
-`EXPO_PUBLIC_API_URL` por axios. No hay que tocar nada mas.
+- `EXPO_PUBLIC_API_URL` incluye el prefijo `/api/v1`. Un telefono no llega a
+  `localhost` de la computadora: usa la IP de la maquina en la misma Wi-Fi
+  (`ipconfig` en Windows). En Azure, la URL publica de la API.
+- El firewall de Windows debe permitir conexiones entrantes al puerto 3000 del
+  backend; si el telefono muestra "No pudimos conectar con el servidor", revisar
+  eso primero.
+- `EXPO_PUBLIC_USE_MOCKS=true` vuelve al backend simulado local (demo sin NestJS).
+- Las variables `EXPO_PUBLIC_*` se leen al iniciar Metro: reiniciar `npm start`
+  despues de cambiarlas.
 
-> Un telefono real no llega a `localhost` de la computadora: al conectar el
-> backend hay que usar la IP de la maquina en la red, por ejemplo
-> `http://192.168.0.12:3000/api`.
+## Cuentas de prueba
 
-## Cuenta de prueba (mock)
+Con la API real se usan las cuentas de la semilla DEMO del backend, por ejemplo
+`cliente1@demo.fashionstore.test` con la contrasena `SEED_DEMO_PASSWORD`, o una
+cuenta nueva creada desde Registrarme. La app es para clientes: carrito, compra
+y reservas propias responden 403 para otros roles.
 
-| Rol | Correo | Contrasena |
-|---|---|---|
-| Cliente | cliente@fashionstore.bo | cliente123 |
-
-La pantalla de acceso la carga con un toque mientras los mocks esten activos.
-Son los mismos usuarios que usa el frontend web.
+En modo mock: `cliente@fashionstore.bo` / `cliente123`.
 
 ## Arquitectura
 
@@ -130,21 +134,42 @@ el backend es la autoridad final de autorizacion.**
 ## Modelo de dominio
 
 `src/types/domain.ts` refleja las 23 clases del diagrama UML con los mismos
-nombres de campo (`id_producto`, `cantidad_fisica`, etc.) y es identico al del
-frontend web, de modo que la respuesta de NestJS se consuma sin capa de mapeo.
+nombres de campo (`id_producto`, `cantidad_fisica`, etc.) que el frontend web.
+NestJS responde en ingles y con `{ success, data }`: `src/api/http.ts`
+desenvuelve la respuesta y los adaptadores de `src/api/*.contratos.ts` la
+traducen, igual que en la web.
 
 Reglas implementadas en `src/lib/domain.ts`:
 
 - `stock_disponible = cantidad_fisica - cantidad_reservada`
 - El inventario se identifica por **sucursal + producto + talla + color**
-- Precio con promocion vigente (`descuento_pct`, `promo_inicio`, `promo_fin`);
-  no existe una entidad `Promocion`, tal como define el MVP.
+- Precio con promocion vigente: con la API real se usan `precio_actual` y
+  `promocion_activa` calculados por NestJS; no existe una entidad `Promocion`.
+- La consulta publica de disponibilidad solo informa unidades disponibles; la
+  app las representa como stock fisico sin reservas.
 
 En el detalle de producto esto se traduce en algo entendible: las tallas y los
 colores sin stock aparecen tachados o apagados, la disponibilidad se muestra
 por sucursal y la cantidad nunca supera lo que queda.
 
-Las ventas creadas desde la app usan el canal `MOVIL`.
+## Compra desde la app
+
+Las compras usan el mismo checkout que la web con canal `MOBILE`:
+
+1. El carrito informa que sucursales tienen stock de todas sus prendas.
+2. `POST /sales/checkout/preview` calcula el total en el servidor (`quoteHash`).
+3. `POST /sales/checkout` crea el pedido y aparta el stock, con clave de
+   idempotencia para no duplicarlo si se reintenta.
+4. Pago:
+   - **Tarjeta (Stripe, modo prueba):** `POST /payments/stripe/intents` entrega
+     el `clientSecret` y el formulario de Stripe.js se abre en un WebView
+     (`PagoStripeWeb.tsx`). Funciona en Expo Go, a diferencia del SDK nativo que
+     requiere un build de desarrollo. Tarjeta de prueba `4242 4242 4242 4242`.
+     La app consulta `GET /sales/:id` hasta que NestJS confirma el cobro.
+   - **Contra entrega:** nombre, telefono y direccion; se paga en efectivo al
+     recibir y la sucursal registra la entrega.
+
+Los datos de la tarjeta van directo a Stripe; ni la app ni NestJS los reciben.
 
 ## Probador virtual (realidad aumentada)
 
@@ -193,10 +218,17 @@ seguimiento que no existe.
 El motor de RA no se convirtio en una entidad del dominio: la app solo consume
 `RecursoRA` (tipo, url, formato, activo), tal como define el diagrama.
 
+**Donde se cargan los modelos:** el administrador registra la URL publica del
+archivo GLB/GLTF/USDZ en la web (Productos -> Editar -> Probador virtual). La app
+lo lee de `GET /products/:id/ar-resources`. El servidor que aloja el modelo debe
+permitir CORS. No se usa IA para el probador: la RA se ejecuta en el telefono.
+
 ## IA
 
-El asistente de estilo y las recomendaciones consumen `/ia/asistente` y
-`/ia/recomendaciones`.
+El asistente de estilo y las recomendaciones consumen `POST /ai/assistant` y
+`GET /ai/recommendations`. NestJS usa Gemini o un modelo local (Ollama); si el
+proveedor no responde, contesta con reglas sobre el catalogo y la app lo indica.
+Las recomendaciones son publicas y se personalizan cuando hay sesion de cliente.
 
 **La llamada a Gemini debe vivir en NestJS.** Una aplicacion movil se distribuye
 como APK y cualquier clave incrustada en ella se puede extraer, asi que la app
@@ -206,10 +238,7 @@ nunca maneja la API key:
 Movil -> NestJS -> Gemini API
 ```
 
-Mientras el backend no exista, `src/mocks/rutas/ia.ts` responde con la misma
-forma (`{ respuesta, productos_sugeridos }`) usando una heuristica local sobre
-el catalogo y el stock. Al conectar NestJS no cambia ni la pantalla ni el
-servicio.
+En modo mock, `src/mocks/rutas/ia.ts` responde con una heuristica local.
 
 ## Rendimiento
 
@@ -229,10 +258,10 @@ La aplicacion tiene que seguir siendo usable en telefonos modestos:
   del propio React Native;
 - sin fuentes descargables: se usan las familias del sistema.
 
-## Mocks temporales
+## Mocks (demo sin backend)
 
-`src/mocks/` simula el backend con las mismas rutas que expondra NestJS y una
-latencia artificial para que se vean los estados de carga. Los datos son los
+Solo con `EXPO_PUBLIC_USE_MOCKS=true`. `src/mocks/` simula el backend con sus
+propias rutas (`src/mocks/endpoints.ts`) y una latencia artificial para que se vean los estados de carga. Los datos son los
 mismos que usa la web (12 productos, 3 sucursales, 5 categorias) y se conservan
 en `AsyncStorage` para que una demostracion no pierda el carrito ni las reservas
 al reiniciar la app.
@@ -243,36 +272,37 @@ Dos detalles del mock, equivalentes a los placeholders de imagen de la web:
 - el `RecursoRA` apunta a un modelo 3D publico de demostracion, para que el
   visor y la RA se puedan probar de verdad.
 
-Ambos se reemplazan con los datos reales del backend.
+Con la API real se usan los datos del backend.
 
-### Para conectar el backend real
+## Endpoints de la API que usa la aplicacion
 
-1. `EXPO_PUBLIC_USE_MOCKS=false` y `EXPO_PUBLIC_API_URL` apuntando a NestJS.
-2. Ajustar `src/api/endpoints.ts` si alguna ruta difiere del contrato real.
-3. Ajustar la forma de la respuesta en `src/services/*` solo si cambia.
-4. Borrar `src/mocks/` y la rama de mocks en `src/api/http.ts`.
-
-## Endpoints que espera la aplicacion
+Todas bajo `EXPO_PUBLIC_API_URL` (`.../api/v1`).
 
 | Modulo | Endpoints |
 |---|---|
-| Acceso | `POST /auth/login`, `POST /auth/registro`, `GET /auth/perfil`, `POST /auth/logout` |
-| Catalogo | `GET /productos`, `GET /productos/:id`, `GET /productos/:id/recursos-ra`, `GET /categorias`, `GET /tallas`, `GET /colores`, `GET /sucursales` |
-| Disponibilidad | `GET /inventario/disponibilidad?id_producto&id_talla&id_color&id_sucursal` |
-| Carrito | `GET /carrito`, `POST /carrito/items`, `PATCH /carrito/items/:id`, `DELETE /carrito/items/:id`, `DELETE /carrito` |
-| Reservas | `GET /reservas`, `GET /reservas/:id`, `POST /reservas`, `POST /reservas/:id/cancelar` |
-| Compras | `GET /ventas`, `GET /ventas/:id`, `POST /ventas` |
-| IA | `POST /ia/asistente`, `GET /ia/recomendaciones` |
+| Acceso | `POST /auth/login`, `POST /auth/register`, `GET /auth/me` (el cierre de sesion es local) |
+| Catalogo | `GET /products`, `GET /products/:id`, `GET /products/:id/ar-resources`, `GET /catalog/categories`, `GET /catalog/sizes`, `GET /catalog/colors`, `GET /branches` |
+| Disponibilidad | `GET /inventory/availability?productId&sizeId&colorId&branchId` |
+| Carrito | `GET /cart`, `POST /cart/items`, `PATCH /cart/items/:id`, `DELETE /cart/items/:id`, `DELETE /cart/items` |
+| Reservas | `GET /reservations/mine`, `GET /reservations/:id`, `POST /reservations`, `PATCH /reservations/:id/cancel` |
+| Compras | `GET /sales/mine`, `GET /sales/:id`, `POST /sales/checkout/preview`, `POST /sales/checkout`, `PATCH /sales/:id/cancel` |
+| Pagos | `POST /payments/stripe/intents` |
+| IA | `POST /ai/assistant`, `GET /ai/recommendations` |
 
-El listado completo, con la forma esperada de cada respuesta, esta documentado
-en los comentarios de `src/services/*`.
+La forma de cada respuesta esta en los adaptadores de `src/api/*.contratos.ts`.
 
 ## Estado actual
 
-- Verificado: `npm run typecheck`, `npm run lint` y `npm run doctor` pasan, y el
-  bundle de Android compila sin errores.
-- Verificado en la vista previa web: inicio, catalogo con filtros, detalle con
-  seleccion de talla/color, disponibilidad por sucursal y el aviso de sesion al
-  intentar usar el carrito.
-- Pendiente de prueba en dispositivo: camara, guardado en galeria y visor de RA
-  dependen de hardware real y no se pueden validar desde el navegador.
+- Conectada a la API real (13/09/2026): `npm run typecheck` pasa y el lint no
+  tiene errores (solo avisos previos del probador y el catalogo).
+- Contratos verificados contra NestJS por la IP de red:
+  - catalogo, disponibilidad, sucursales y modelos 3D;
+  - carrito y cotizacion de checkout;
+  - reservas y compras propias;
+  - recomendaciones con Gemini.
+- Vista previa web con la API real: inicio con recomendaciones y detalle de
+  producto sin errores de consola.
+- Pendiente en telefono con Expo Go:
+  - inicio de sesion;
+  - pago Stripe en el WebView;
+  - camara, galeria y visor de RA (dependen de hardware real).

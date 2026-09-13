@@ -84,7 +84,12 @@ export default function PaginaInicio() {
               {recomendaciones.data
                 .filter((r) => r.producto)
                 .map((r) => (
-                  <TarjetaProducto key={r.id_recomendacion} producto={r.producto!} />
+                  <div key={r.id_recomendacion} className="fs-pila" style={{ gap: 6 }}>
+                    <TarjetaProducto producto={r.producto!} />
+                    <p className="fs-sub" style={{ fontSize: '0.8rem' }}>
+                      {r.motivo}
+                    </p>
+                  </div>
                 ))}
             </div>
           </section>

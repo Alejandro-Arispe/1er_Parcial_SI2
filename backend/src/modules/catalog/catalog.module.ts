@@ -9,15 +9,19 @@ import { ProductsController } from './products/products.controller.js';
 import { ProductsRepository } from './products/products.repository.js';
 import { ProductsService } from './products/products.service.js';
 import { ProductImagesService } from './products/product-images.service.js';
+import { ArResourcesController } from './products/ar-resources.controller.js';
+import { ArResourcesService } from './products/ar-resources.service.js';
 
 @Module({
   imports: [PassportModule.register({ defaultStrategy: 'jwt' })],
   controllers: [
     CatalogController,
     ProductsController,
+    ArResourcesController,
     SupplierPortalController,
   ],
   providers: [
+    ArResourcesService,
     SupplierPortalService,
     ProductImagesService,
     CatalogService,

@@ -3,9 +3,11 @@
  * sesion. Solo se muestran los campos que existen en el modelo de dominio
  * (Usuario + Cliente); no se inventan datos personales adicionales.
  */
+import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Boton } from '../../components/Boton';
+import { Campo } from '../../components/Campo';
 import { Pantalla } from '../../components/Pantalla';
 import { RequiereSesion } from '../../components/RequiereSesion';
 import { useAvisos } from '../../context/AvisosContext';
@@ -16,8 +18,37 @@ import type { PropsTab } from '../../navigation/tipos';
 import { colores, esp, radio, texto } from '../../theme';
 
 export function PantallaPerfil({ navigation }: PropsTab<'Perfil'>) {
-  const { usuario, cliente, autenticado, cerrarSesion } = useSesion();
-  const { avisarError } = useAvisos();
+  const { usuario, cliente, autenticado, cerrarSesion, actualizarPerfil } = useSesion();
+  const { avisar, avisarError } = useAvisos();
+  const [editando, setEditando] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [borrador, setBorrador] = useState({ nombre: '', telefono: '', direccion: '' });
+
+  function abrirEdicion() {
+    setBorrador({
+      nombre: usuario?.nombre ?? '',
+      telefono: cliente?.telefono ?? '',
+      direccion: cliente?.direccion ?? '',
+    });
+    setEditando(true);
+  }
+
+  async function guardar() {
+    if (borrador.nombre.trim().length < 2) {
+      avisar('El nombre debe tener al menos 2 caracteres.', 'info');
+      return;
+    }
+    setGuardando(true);
+    try {
+      await actualizarPerfil(borrador);
+      setEditando(false);
+      avisar('Tus datos se actualizaron.');
+    } catch (error) {
+      avisarError(error);
+    } finally {
+      setGuardando(false);
+    }
+  }
 
   if (!autenticado || !usuario) {
     return (
@@ -58,15 +89,47 @@ export function PantallaPerfil({ navigation }: PropsTab<'Perfil'>) {
           </View>
         </View>
 
-        <View style={estilos.tarjeta}>
-          <Text style={estilos.tituloBloque}>Mis datos</Text>
-          <Dato icono="call-outline" etiqueta="Telefono" valor={cliente?.telefono || 'Sin registrar'} />
-          <Dato icono="location-outline" etiqueta="Direccion" valor={cliente?.direccion || 'Sin registrar'} />
-          <Text style={estilos.detalle}>
-            Para actualizar tus datos acercate a cualquier sucursal o escribenos: la edicion del perfil se
-            habilitara cuando el backend exponga ese servicio.
-          </Text>
-        </View>
+        {editando ? (
+          <View style={estilos.tarjeta}>
+            <Text style={estilos.tituloBloque}>Editar mis datos</Text>
+            <Campo
+              etiqueta="Nombre completo"
+              value={borrador.nombre}
+              maxLength={120}
+              onChangeText={(nombre) => setBorrador((d) => ({ ...d, nombre }))}
+            />
+            {cliente ? (
+              <>
+                <Campo
+                  etiqueta="Telefono"
+                  keyboardType="phone-pad"
+                  value={borrador.telefono}
+                  maxLength={30}
+                  onChangeText={(telefono) => setBorrador((d) => ({ ...d, telefono }))}
+                />
+                <Campo
+                  etiqueta="Direccion"
+                  value={borrador.direccion}
+                  maxLength={250}
+                  multiline
+                  onChangeText={(direccion) => setBorrador((d) => ({ ...d, direccion }))}
+                />
+              </>
+            ) : null}
+            <Text style={estilos.detalle}>El correo y la contrasena los cambia la tienda.</Text>
+            <View style={estilos.filaBotones}>
+              <Boton titulo="Cancelar" variante="secundario" onPress={() => setEditando(false)} estilo={estilos.mitad} />
+              <Boton titulo="Guardar" onPress={guardar} cargando={guardando} estilo={estilos.mitad} />
+            </View>
+          </View>
+        ) : (
+          <View style={estilos.tarjeta}>
+            <Text style={estilos.tituloBloque}>Mis datos</Text>
+            <Dato icono="call-outline" etiqueta="Telefono" valor={cliente?.telefono || 'Sin registrar'} />
+            <Dato icono="location-outline" etiqueta="Direccion" valor={cliente?.direccion || 'Sin registrar'} />
+            <Boton titulo="Editar mis datos" icono="create-outline" variante="secundario" onPress={abrirEdicion} />
+          </View>
+        )}
 
         <View style={estilos.tarjeta}>
           <Text style={estilos.tituloBloque}>Mi actividad</Text>
@@ -179,6 +242,8 @@ const estilos = StyleSheet.create({
     gap: esp.s,
   },
   tituloBloque: { ...texto.subtitulo },
+  filaBotones: { flexDirection: 'row', gap: esp.m },
+  mitad: { flex: 1 },
   dato: { flexDirection: 'row', alignItems: 'center', gap: esp.s },
   datoEtiqueta: { ...texto.menor, width: 78 },
   datoValor: { ...texto.cuerpo, flex: 1, color: colores.tinta, textAlign: 'right' },

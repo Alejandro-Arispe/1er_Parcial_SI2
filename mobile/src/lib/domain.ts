@@ -19,6 +19,8 @@ export function hayDisponibilidad(
 
 /** La promocion solo aplica dentro de la ventana promo_inicio..promo_fin. */
 export function promocionVigente(producto: Producto, referencia: Date = new Date()): boolean {
+  // NestJS calcula la vigencia con su propia fecha: es la fuente de verdad.
+  if (producto.promocion_activa !== undefined) return producto.promocion_activa;
   if (!producto.descuento_pct || producto.descuento_pct <= 0) return false;
   const hoy = referencia.getTime();
   const inicio = producto.promo_inicio ? new Date(producto.promo_inicio).getTime() : -Infinity;
@@ -28,6 +30,7 @@ export function promocionVigente(producto: Producto, referencia: Date = new Date
 
 /** Producto.obtenerPrecioActual() */
 export function precioActual(producto: Producto, referencia: Date = new Date()): number {
+  if (producto.precio_actual !== undefined) return producto.precio_actual;
   if (!promocionVigente(producto, referencia)) return producto.precio;
   return redondear(producto.precio * (1 - producto.descuento_pct / 100));
 }

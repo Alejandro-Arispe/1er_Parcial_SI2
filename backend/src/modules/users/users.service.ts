@@ -148,6 +148,31 @@ export class UsersService {
     );
   }
 
+  /** Autoservicio: nombre para cualquier cuenta; telefono y direccion solo con perfil de cliente. */
+  async updateOwnProfile(
+    id: number,
+    data: { name?: string; phone?: string; address?: string },
+  ) {
+    const current = await this.findOne(id);
+    const clientFields = data.phone !== undefined || data.address !== undefined;
+    if (clientFields && !current.client) {
+      throw new BadRequestException(
+        'The user does not have a customer profile',
+      );
+    }
+    return this.usersRepository.update(
+      id,
+      { name: data.name },
+      clientFields
+        ? {
+            phone: data.phone === undefined ? undefined : data.phone || null,
+            address:
+              data.address === undefined ? undefined : data.address || null,
+          }
+        : undefined,
+    );
+  }
+
   async deactivate(id: number) {
     await this.findOne(id);
     return this.usersRepository.deactivate(id);

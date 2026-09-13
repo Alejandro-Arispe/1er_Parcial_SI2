@@ -17,6 +17,7 @@ const ADMIN: GrupoNav[] = [
     enlaces: [
       { a: '/admin', texto: 'Dashboard', exacto: true },
       { a: '/admin/reportes', texto: 'Reportes' },
+      { a: '/admin/reportes-ia', texto: 'Reportes con IA' },
     ],
   },
   {
@@ -60,6 +61,8 @@ const SUCURSAL: GrupoNav[] = [
       { a: '/sucursal/inventario', texto: 'Inventario' },
       { a: '/sucursal/movimientos', texto: 'Movimientos' },
       { a: '/sucursal/ventas', texto: 'Ventas' },
+      { a: '/sucursal/reportes', texto: 'Reportes' },
+      { a: '/sucursal/reportes-ia', texto: 'Reportes con IA' },
       { a: '/caja', texto: 'Punto de venta', exacto: true },
       { a: '/caja/turnos', texto: 'Turnos y arqueos' },
       { a: '/caja/offline', texto: 'Ventas offline' },

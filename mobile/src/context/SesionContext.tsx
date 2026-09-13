@@ -20,6 +20,7 @@ import { guardarToken, hidratarToken } from '../api/almacenamiento';
 import {
   authService,
   type CredencialesLogin,
+  type DatosPerfil,
   type DatosRegistro,
 } from '../services/auth.service';
 import type { Cliente, Usuario } from '../types/domain';
@@ -33,6 +34,7 @@ interface ValorSesion {
   iniciarSesion: (credenciales: CredencialesLogin) => Promise<Usuario>;
   registrar: (datos: DatosRegistro) => Promise<Usuario>;
   cerrarSesion: () => Promise<void>;
+  actualizarPerfil: (datos: DatosPerfil) => Promise<Usuario>;
 }
 
 const Contexto = createContext<ValorSesion | null>(null);
@@ -93,6 +95,15 @@ export function ProveedorSesion({ children }: { children: ReactNode }) {
     queryClient.clear();
   }, [queryClient]);
 
+  const actualizarPerfil = useCallback(
+    async (datos: DatosPerfil) => {
+      const perfil = await authService.actualizarPerfil(datos, comoCliente(usuario) !== null);
+      setUsuario(perfil);
+      return perfil;
+    },
+    [usuario],
+  );
+
   const valor = useMemo<ValorSesion>(
     () => ({
       usuario,
@@ -102,8 +113,9 @@ export function ProveedorSesion({ children }: { children: ReactNode }) {
       iniciarSesion,
       registrar,
       cerrarSesion,
+      actualizarPerfil,
     }),
-    [usuario, restaurando, iniciarSesion, registrar, cerrarSesion],
+    [usuario, restaurando, iniciarSesion, registrar, cerrarSesion, actualizarPerfil],
   );
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;

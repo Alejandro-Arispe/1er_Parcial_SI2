@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
 import { AuthService } from './auth.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
+import { UpdateProfileDto } from './dto/update-profile.dto.js';
 
 @Controller('auth')
 export class AuthController {
@@ -23,5 +24,12 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   me(@CurrentUser('id') userId: number) {
     return this.authService.me(userId);
+  }
+
+  /** Autoservicio del perfil: nombre y, para clientes, telefono y direccion. */
+  @Patch('me')
+  @UseGuards(JwtAuthGuard)
+  updateMe(@CurrentUser('id') userId: number, @Body() dto: UpdateProfileDto) {
+    return this.authService.updateProfile(userId, dto);
   }
 }

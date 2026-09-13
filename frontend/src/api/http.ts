@@ -75,6 +75,21 @@ const TRADUCCIONES: Record<string, string> = {
   'You can only register movements in your assigned branch':
     'Solo puedes registrar movimientos en tu sucursal asignada.',
 
+  'The user does not have a customer profile':
+    'Tu cuenta no tiene perfil de cliente: solo puedes cambiar el nombre.',
+  'phone must be a valid phone number': 'El telefono no tiene un formato valido.',
+  'Notification was not found': 'La notificacion ya no esta disponible.',
+  'Notifications are limited to your assigned branch':
+    'Solo puedes ver las notificaciones de tu sucursal asignada.',
+  'Too many AI requests; wait a minute and retry':
+    'Hiciste muchas consultas a la IA. Espera un minuto e intenta de nuevo.',
+  'Report period must span 1–366 days': 'El periodo del reporte debe abarcar entre 1 y 366 dias.',
+  'Invalid report date; use YYYY-MM-DD (1900–2100)': 'La fecha del reporte no es valida.',
+  'Reports are limited to your assigned branch':
+    'Solo puedes consultar los reportes de tu sucursal asignada.',
+  'Report access requires an administrator or branch manager':
+    'Los reportes estan disponibles para administradores y encargados de sucursal.',
+
   'Invalid email or password': 'Correo o contrasena incorrectos.',
   'Email is already registered': 'Ya existe una cuenta registrada con ese correo.',
   Unauthorized: 'Tu sesion expiro. Vuelve a iniciar sesion.',
