@@ -21,7 +21,9 @@ export const endpoints = {
     temporada: (id: number | string) => `/catalog/seasons/${id}`,
     colecciones: '/catalog/collections',
     coleccion: (id: number | string) => `/catalog/collections/${id}`,
-    recursosRA: (idProducto: number | string) => `/products/${idProducto}/recursos-ra`,
+    recursosRA: (idProducto: number | string) => `/products/${idProducto}/ar-resources`,
+    recursoRA: (idProducto: number | string, id: number | string) =>
+      `/products/${idProducto}/ar-resources/${id}`,
   },
   sucursales: {
     lista: '/branches',
@@ -75,15 +77,21 @@ export const endpoints = {
     empleado: (id: number | string) => `/empleados/${id}`,
   },
   reportes: {
-    resumen: '/reportes/resumen',
-    ventasPorPeriodo: '/reportes/ventas-por-periodo',
-    ventasPorSucursal: '/reportes/ventas-por-sucursal',
-    topProductos: '/reportes/top-productos',
-    inventarioCritico: '/reportes/inventario-critico',
-    reservasPorEstado: '/reportes/reservas-por-estado',
+    ventas: '/reports/sales',
+    topProductos: '/reports/top-products',
+    inventario: '/reports/inventory',
+    reservas: '/reports/reservations',
+    caja: '/reports/cash-shifts',
+  },
+  notificaciones: {
+    lista: '/notifications',
+    noLeidas: '/notifications/unread-count',
+    leer: (id: number) => `/notifications/${id}/read`,
   },
   ia: {
-    recomendaciones: '/ia/recomendaciones',
-    asistente: '/ia/asistente',
+    estado: '/ai/status',
+    recomendaciones: '/ai/recommendations',
+    asistente: '/ai/assistant',
+    reportes: '/ai/reports',
   },
 } as const;

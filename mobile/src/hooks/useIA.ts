@@ -1,22 +1,24 @@
-/** Recomendaciones y asistente. El proveedor real (Gemini) vive en NestJS. */
+/** Recomendaciones y asistente. El proveedor real (Gemini o IA local) vive en NestJS. */
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { iaService } from '../services/ia.service';
+import { iaService, type OpcionesRecomendacion } from '../services/ia.service';
 import { useSesion } from '../context/SesionContext';
-import { claves } from './claves';
+import type { MensajeChat } from '../types/ia';
 
-export function useRecomendaciones(opciones: { limite?: number; contexto?: string } = {}) {
-  const { autenticado } = useSesion();
+/** Publicas: con sesion de cliente el backend las personaliza con su historial. */
+export function useRecomendaciones(opciones: OpcionesRecomendacion = {}, habilitado = true) {
+  const { usuario, restaurando } = useSesion();
   return useQuery({
-    queryKey: claves.recomendaciones(opciones.contexto),
+    queryKey: ['recomendaciones', opciones, usuario?.id_usuario ?? 0],
     queryFn: () => iaService.recomendaciones(opciones),
-    enabled: autenticado,
+    enabled: habilitado && !restaurando,
     staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 }
 
 export function usePreguntarIA() {
   return useMutation({
-    mutationFn: ({ mensaje, historial }: { mensaje: string; historial: string[] }) =>
+    mutationFn: ({ mensaje, historial }: { mensaje: string; historial: MensajeChat[] }) =>
       iaService.preguntar(mensaje, historial),
   });
 }

@@ -2,6 +2,7 @@ import { useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Modal } from '../../components/ui/Modal';
 import { ImagenProducto } from '../../components/ui/ImagenProducto';
+import { etiquetaOrigen } from '../../api/ia.contratos';
 import { usePreguntarIA } from '../../hooks/useOperaciones';
 import { moneda } from '../../lib/format';
 import { precioActual } from '../../lib/domain';
@@ -44,7 +45,7 @@ export function AsistenteIA({ abierto, onCerrar }: { abierto: boolean; onCerrar:
     try {
       const respuesta = await preguntar.mutateAsync({
         mensaje: contenido,
-        historial: mensajes.map((m) => m.texto),
+        historial: mensajes.filter((m) => m.id !== BIENVENIDA.id && !m.id.startsWith('e-')),
       });
       setMensajes((m) => [
         ...m,
@@ -53,6 +54,7 @@ export function AsistenteIA({ abierto, onCerrar }: { abierto: boolean; onCerrar:
           rol: 'asistente',
           texto: respuesta.respuesta,
           productos: respuesta.productos_sugeridos,
+          origen: respuesta.origen,
           fecha: new Date().toISOString(),
         },
       ]);
@@ -81,6 +83,11 @@ export function AsistenteIA({ abierto, onCerrar }: { abierto: boolean; onCerrar:
           {mensajes.map((m) => (
             <div key={m.id} className="fs-pila" style={{ gap: 8 }}>
               <div className={`fs-chat__burbuja fs-chat__burbuja--${m.rol}`}>{m.texto}</div>
+              {m.origen && (
+                <span className="fs-sub" style={{ fontSize: '0.72rem' }}>
+                  Respuesta: {etiquetaOrigen(m.origen)}
+                </span>
+              )}
 
               {m.productos && m.productos.length > 0 && (
                 <div className="fs-chat__sugeridos">

@@ -27,10 +27,12 @@ export const CanalVenta = {
 export type CanalVenta = (typeof CanalVenta)[keyof typeof CanalVenta];
 
 export const EstadoVenta = {
+  BORRADOR: 'BORRADOR',
   PENDIENTE: 'PENDIENTE',
   PAGADA: 'PAGADA',
   ENTREGADA: 'ENTREGADA',
   ANULADA: 'ANULADA',
+  REEMBOLSADA: 'REEMBOLSADA',
 } as const;
 export type EstadoVenta = (typeof EstadoVenta)[keyof typeof EstadoVenta];
 
@@ -54,6 +56,7 @@ export const EstadoPago = {
   APROBADO: 'APROBADO',
   RECHAZADO: 'RECHAZADO',
   ANULADO: 'ANULADO',
+  REEMBOLSADO: 'REEMBOLSADO',
 } as const;
 export type EstadoPago = (typeof EstadoPago)[keyof typeof EstadoPago];
 
@@ -110,6 +113,8 @@ export interface Cliente extends Usuario {
   id_cliente: number;
   telefono: string;
   direccion: string;
+  /** Clasificacion comercial: el backend aplica el precio mayorista si existe. */
+  mayorista?: boolean;
 }
 
 export interface Empleado extends Usuario {
@@ -197,7 +202,15 @@ export interface Producto {
   coleccion?: Coleccion | null;
   proveedor?: Proveedor | null;
   tiene_recurso_ra?: boolean;
+  /** Calculados por NestJS: precio vigente y promocion dentro de su ventana. */
+  precio_actual?: number;
+  promocion_activa?: boolean;
+  imagenes?: string[];
+  recursos_ra?: RecursoRA[];
 }
+
+/** Datos minimos de una prenda dentro de carrito, reserva o venta. */
+export type ProductoResumen = Pick<Producto, 'id_producto' | 'nombre'> & Partial<Producto>;
 
 /* ============================================================
  * 3. Inventario
@@ -244,12 +257,14 @@ export interface DetalleReserva {
   id_color: number;
   cantidad: number;
   estado: string;
-  producto?: Producto;
+  producto?: ProductoResumen;
   talla?: Talla;
   color?: Color;
 }
 
 export interface Reserva {
+  /** Limite para presentarse; despues el sistema la vence y libera el stock. */
+  vence_en?: string;
   id_reserva: number;
   id_cliente: number;
   id_sucursal: number;
@@ -274,17 +289,25 @@ export interface DetalleCarrito {
   id_color: number;
   cantidad: number;
   precio_unitario: number;
-  producto?: Producto;
+  producto?: ProductoResumen;
   talla?: Talla;
   color?: Color;
+  subtotal?: number;
+  disponible?: boolean;
+  problema?: 'PRODUCT_INACTIVE' | 'VARIANT_UNAVAILABLE' | 'INSUFFICIENT_STOCK' | null;
 }
 
 export interface Carrito {
   id_carrito: number;
-  id_cliente: number;
+  id_cliente?: number;
   fecha_creacion: string;
   estado: EstadoCarrito;
   detalles: DetalleCarrito[];
+  total?: number;
+  cantidad_total?: number;
+  tiene_disponibilidad?: boolean;
+  /** Sucursales que pueden atender el carrito completo. */
+  sucursales_disponibles?: Array<Pick<Sucursal, 'id_sucursal' | 'nombre' | 'ciudad'>>;
 }
 
 /* ============================================================
@@ -300,7 +323,7 @@ export interface DetalleVenta {
   cantidad: number;
   precio_unitario: number;
   descuento: number;
-  producto?: Producto;
+  producto?: ProductoResumen;
   talla?: Talla;
   color?: Color;
 }
@@ -326,6 +349,10 @@ export interface Venta {
   canal: CanalVenta;
   estado: EstadoVenta;
   total: number;
+  moneda?: string;
+  contra_entrega?: boolean;
+  /** Plazo para completar el pago electronico. */
+  vence_en?: string | null;
   detalles: DetalleVenta[];
   pagos: Pago[];
   cliente?: { id_cliente: number; nombre: string; email: string } | null;

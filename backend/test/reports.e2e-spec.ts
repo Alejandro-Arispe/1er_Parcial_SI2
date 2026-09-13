@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { hash } from 'bcrypt';
 import request from 'supertest';
 import { Prisma, SaleStatus } from '../src/generated/prisma/client.js';
@@ -84,6 +85,7 @@ describe.skipIf(!databaseUrl)('Reports (HTTP and PostgreSQL)', () => {
   beforeEach(async () => {
     await ctx.prisma.payment.deleteMany();
     await ctx.prisma.sale.deleteMany();
+    await ctx.prisma.cashShift.deleteMany();
     await ctx.prisma.reservation.deleteMany();
     await ctx.prisma.inventoryMovement.deleteMany();
     await ctx.prisma.inventory.updateMany({
@@ -211,6 +213,129 @@ describe.skipIf(!databaseUrl)('Reports (HTTP and PostgreSQL)', () => {
     ]);
   });
 
+  it('groups completed sales by local hour', async () => {
+    // 16:30Z y 16:59Z son las 12 en Bolivia; 23:10Z son las 19.
+    await sale({ confirmedAt: new Date('2026-09-12T16:30:00Z') });
+    await sale({ confirmedAt: new Date('2026-09-12T16:59:00Z') });
+    await sale({ confirmedAt: new Date('2026-09-12T23:10:00Z') });
+    await sale({
+      status: 'CANCELLED',
+      confirmedAt: new Date('2026-09-12T20:00:00Z'),
+    });
+    const data = (await get('sales', period).expect(200)).body.data;
+    expect(
+      data.hourly.map(
+        (h: { hour: number; saleCount: number; revenue: number }) => [
+          h.hour,
+          h.saleCount,
+          h.revenue,
+        ],
+      ),
+    ).toEqual([
+      [12, 2, 20],
+      [19, 1, 10],
+    ]);
+  });
+
+  it('reports cash shifts by register with payment methods, open shifts and cash differences', async () => {
+    const register = await ctx.prisma.cashRegister.findFirstOrThrow({
+      where: { branchId: ctx.branch.id },
+    });
+    const otherRegister = await ctx.prisma.cashRegister.findFirstOrThrow({
+      where: { branchId: ctx.otherBranch.id },
+    });
+    const shift = (
+      data: Omit<
+        Prisma.CashShiftCreateManyInput,
+        'userId' | 'openingKey' | 'currency'
+      >,
+    ) => ({
+      userId: ctx.users[2]!.id,
+      openingKey: randomUUID(),
+      currency: 'BOB',
+      ...data,
+    });
+    await ctx.prisma.cashShift.createMany({
+      data: [
+        shift({
+          registerId: register.id,
+          openingCash: 100,
+          cashTotal: 50,
+          cardTotal: 20,
+          qrTotal: 5,
+          saleCount: 4,
+          openedAt: new Date('2026-09-12T13:00:00Z'),
+          closedAt: new Date('2026-09-12T22:00:00Z'),
+          countedCash: 145,
+        }),
+        shift({
+          registerId: register.id,
+          openingCash: 50,
+          cashTotal: 10,
+          saleCount: 1,
+          openedAt: new Date('2026-09-12T23:00:00Z'),
+        }),
+        shift({
+          registerId: otherRegister.id,
+          openingCash: 0,
+          cardTotal: 30,
+          saleCount: 1,
+          openedAt: new Date('2026-09-12T15:00:00Z'),
+          closedAt: new Date('2026-09-12T18:00:00Z'),
+          countedCash: 0,
+        }),
+        shift({
+          registerId: register.id,
+          openingCash: 10,
+          cashTotal: 999,
+          openedAt: new Date('2026-09-14T15:00:00Z'),
+          closedAt: new Date('2026-09-14T18:00:00Z'),
+          countedCash: 1009,
+        }),
+      ],
+    });
+
+    const data = (await get('cash-shifts', period).expect(200)).body.data;
+    expect(data.totals).toEqual([
+      {
+        currency: 'BOB',
+        shiftCount: 3,
+        openShifts: 1,
+        saleCount: 6,
+        cash: 60,
+        card: 50,
+        qr: 5,
+        transfer: 0,
+        total: 115,
+        difference: -5,
+        shiftsWithDifference: 1,
+      },
+    ]);
+    expect(data.byRegister).toHaveLength(2);
+    expect(data.shifts).toHaveLength(3);
+    expect(data.shifts[0]).toMatchObject({
+      registerName: 'Caja 1',
+      branchName: ctx.branch.name,
+      closedAt: null,
+      expectedCash: 60,
+      countedCash: null,
+      difference: null,
+    });
+
+    const byRegister = (
+      await get('cash-shifts', { ...period, registerId: register.id }).expect(
+        200,
+      )
+    ).body.data;
+    expect(byRegister.shifts).toHaveLength(2);
+    const manager = (await get('cash-shifts', period, managerToken).expect(200))
+      .body.data;
+    expect(
+      manager.byRegister.map((r: { branchId: number }) => r.branchId),
+    ).toEqual([ctx.branch.id]);
+    await get('cash-shifts', { registerId: 0 }).expect(400);
+  });
+
   it('reports available/held/incoming stock and paginates the low stock subset', async () => {
     const inventories = await ctx.prisma.inventory.findMany({
       orderBy: { id: 'asc' },
@@ -308,7 +433,13 @@ describe.skipIf(!databaseUrl)('Reports (HTTP and PostgreSQL)', () => {
     await request(ctx.app.getHttpServer())
       .get('/api/v1/reports/sales')
       .expect(401);
-    for (const path of ['sales', 'top-products', 'inventory', 'reservations']) {
+    for (const path of [
+      'sales',
+      'top-products',
+      'inventory',
+      'reservations',
+      'cash-shifts',
+    ]) {
       await get(path, {}, ctx.tokens[0]).expect(403);
       await get(path, { branchId: ctx.otherBranch.id }, managerToken).expect(
         403,

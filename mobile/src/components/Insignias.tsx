@@ -61,6 +61,8 @@ const TONO_VENTA: Record<string, Tono> = {
   [EstadoVenta.PAGADA]: 'exito',
   [EstadoVenta.ENTREGADA]: 'info',
   [EstadoVenta.ANULADA]: 'error',
+  [EstadoVenta.BORRADOR]: 'neutro',
+  [EstadoVenta.REEMBOLSADA]: 'neutro',
 };
 
 export function InsigniaVenta({ estado }: { estado: string }) {
@@ -72,6 +74,7 @@ const TONO_PAGO: Record<string, Tono> = {
   [EstadoPago.APROBADO]: 'exito',
   [EstadoPago.RECHAZADO]: 'error',
   [EstadoPago.ANULADO]: 'neutro',
+  [EstadoPago.REEMBOLSADO]: 'neutro',
 };
 
 export function InsigniaPago({ estado }: { estado: string }) {

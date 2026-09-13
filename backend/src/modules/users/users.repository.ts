@@ -57,8 +57,8 @@ interface FindUsersOptions {
 
 interface ClientUpdate {
   wholesale?: boolean;
-  phone?: string;
-  address?: string;
+  phone?: string | null;
+  address?: string | null;
 }
 
 interface EmployeeUpdate {

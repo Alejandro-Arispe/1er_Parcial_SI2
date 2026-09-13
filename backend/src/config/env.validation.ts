@@ -48,6 +48,19 @@ export const environmentValidationSchema = Joi.object({
       }
     })
     .default('America/La_Paz'),
+  AI_PROVIDER: Joi.string().valid('gemini', 'ollama', 'none').default('gemini'),
+  AI_TIMEOUT_MS: Joi.number().integer().min(1000).max(300000).default(20000),
+  AI_REQUESTS_PER_MINUTE: Joi.number().integer().min(1).max(1000).default(20),
+  GEMINI_API_KEY: Joi.string().empty('').optional(),
+  GEMINI_MODEL: Joi.string()
+    .pattern(/^[a-zA-Z0-9._-]+$/)
+    .default('gemini-3.6-flash'),
+  OLLAMA_BASE_URL: Joi.string()
+    .uri({ scheme: ['http', 'https'] })
+    .default('http://localhost:11434'),
+  OLLAMA_MODEL: Joi.string()
+    .pattern(/^[a-zA-Z0-9._:/-]+$/)
+    .default('qwen2.5:3b'),
   SEED_ADMIN_EMAIL: Joi.string().email().optional(),
   SEED_ADMIN_PASSWORD: Joi.string().min(8).max(72).optional(),
 })

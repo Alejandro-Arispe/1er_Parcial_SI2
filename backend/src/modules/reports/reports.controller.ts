@@ -6,6 +6,7 @@ import { Role } from '../../common/enums/role.enum.js';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../../common/guards/roles.guard.js';
 import {
+  CashShiftsReportQueryDto,
   InventoryReportQueryDto,
   PeriodReportQueryDto,
   SalesReportQueryDto,
@@ -38,6 +39,13 @@ export class ReportsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.reports.inventory(query, user);
+  }
+  @Get('cash-shifts')
+  cashShifts(
+    @Query() query: CashShiftsReportQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.reports.cashShifts(query, user);
   }
   @Get('reservations')
   reservations(

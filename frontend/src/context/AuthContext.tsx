@@ -32,6 +32,8 @@ interface ContextoAuth {
   iniciarSesion: (credenciales: CredencialesLogin) => Promise<Usuario>;
   registrarse: (datos: DatosRegistro) => Promise<Usuario>;
   cerrarSesion: () => Promise<void>;
+  /** Reemplaza los datos de la sesion despues de editar el perfil. */
+  actualizarUsuario: (usuario: Usuario) => void;
 }
 
 const Contexto = createContext<ContextoAuth | null>(null);
@@ -149,6 +151,7 @@ export function ProveedorAuth({ children }: { children: ReactNode }) {
       iniciarSesion,
       registrarse,
       cerrarSesion,
+      actualizarUsuario: setUsuario,
     };
   }, [
     usuario,

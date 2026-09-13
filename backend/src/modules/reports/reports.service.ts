@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable } from '@nestjs/common';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator.js';
 import { Role } from '../../common/enums/role.enum.js';
 import {
+  CashShiftsReportQueryDto,
   InventoryReportQueryDto,
   PeriodReportQueryDto,
   SalesReportQueryDto,
@@ -55,6 +56,15 @@ export class ReportsService {
       generatedAt: new Date(),
       filters: scoped,
       ...(await this.repository.inventory(scoped)),
+    });
+  }
+  async cashShifts(query: CashShiftsReportQueryDto, user: AuthenticatedUser) {
+    const scoped = await this.scoped(query, user);
+    const period = reportPeriod(query.from, query.to);
+    return reportNumbers({
+      period,
+      filters: scoped,
+      ...(await this.repository.cashShifts(scoped, period)),
     });
   }
   async reservations(query: PeriodReportQueryDto, user: AuthenticatedUser) {

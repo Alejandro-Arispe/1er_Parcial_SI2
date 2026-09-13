@@ -73,6 +73,27 @@ Cambiar el precio actual del producto no modifica esos importes.
 Los desgloses de una misma consulta de ventas usan una transacción de lectura
 repetible para obtener una vista consistente mientras se registran nuevas compras.
 
+### Ventas por hora
+
+`/sales` también devuelve `hourly`: las mismas métricas agrupadas por **hora local de Bolivia** (0 a 23) según la fecha de confirmación. Las horas sin ventas no aparecen; la web completa el horario comercial (8 a 21) con ceros.
+
+## Cajas y turnos
+
+```text
+GET /api/v1/reports/cash-shifts?from=2026-09-01&to=2026-09-30
+GET /api/v1/reports/cash-shifts?branchId=2&registerId=4
+```
+
+Incluye los turnos **abiertos** dentro del periodo, por fecha de apertura en días de Bolivia. Acepta los mismos permisos y el mismo alcance por sucursal que el resto de reportes, y además `registerId` para filtrar una caja.
+
+- `totals`: por moneda, con `shiftCount`, `openShifts`, `saleCount`, `cash`, `card`, `qr`, `transfer`, `total`, `difference` y `shiftsWithDifference`.
+- `byRegister`: las mismas métricas por caja y sucursal.
+- `shifts`: hasta 100 turnos, del más reciente al más antiguo. Cada uno trae cajero, apertura y cierre, montos por medio de pago, `expectedCash` (saldo inicial + efectivo), `countedCash` y `difference`.
+
+`difference` es el efectivo contado menos el esperado: negativo es faltante y positivo es sobrante. Solo existe en turnos cerrados; en los abiertos vale `null` y no suma al total. Los importes provienen de los acumulados que la venta registra en el turno, así que coinciden con el arqueo del cierre.
+
+La IA de reportes también reconoce solicitudes de cajas, turnos o arqueo (`cash-shifts`) y de ventas por hora.
+
 ## Inventario
 
 ```text

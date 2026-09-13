@@ -32,7 +32,10 @@ export function validarRegistro(datos: {
   if (!datos.email.trim()) errores.email = 'Ingresa tu correo.';
   else if (!emailValido(datos.email)) errores.email = 'El correo no tiene un formato valido.';
   if (!datos.password) errores.password = 'Crea una contrasena.';
-  else if (datos.password.length < 6) errores.password = 'Usa al menos 6 caracteres.';
+  else if (datos.password.length < 8 || datos.password.length > 72)
+    errores.password = 'Usa entre 8 y 72 caracteres.';
+  else if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/.test(datos.password))
+    errores.password = 'Incluye una mayuscula, una minuscula y un numero.';
   if (datos.confirmar !== datos.password) errores.confirmar = 'Las contrasenas no coinciden.';
   if (datos.telefono && !/^[\d\s+-]{7,15}$/.test(datos.telefono)) {
     errores.telefono = 'El telefono no parece valido.';

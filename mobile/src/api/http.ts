@@ -3,21 +3,23 @@
  *
  *   Pantalla -> hook -> servicio -> api (este archivo) -> NestJS | mock
  *
- * Mientras EXPO_PUBLIC_USE_MOCKS sea "true" las peticiones se resuelven con el
- * mock local. Al apagar la bandera la misma llamada sale por axios hacia
- * NestJS sin tocar servicios ni pantallas.
+ * Con la API real se desenvuelve { success, data } de NestJS y los errores se
+ * traducen a mensajes para el cliente. EXPO_PUBLIC_USE_MOCKS=true conserva la
+ * demo local sin backend.
  */
 import axios, { AxiosError, type AxiosRequestConfig } from 'axios';
 import { ErrorApi } from '../types/api';
 import { mockRequest } from '../mocks';
-import { obtenerToken } from './almacenamiento';
+import { guardarToken, obtenerToken } from './almacenamiento';
+import { desenvolverRespuesta, type RespuestaBackend } from './contratos';
 
-export const USAR_MOCKS = process.env.EXPO_PUBLIC_USE_MOCKS !== 'false';
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000/api';
+export const USAR_MOCKS = process.env.EXPO_PUBLIC_USE_MOCKS === 'true';
+export const BASE_URL = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api/v1').replace(/\/+$/, '');
 
 export const instancia = axios.create({
   baseURL: BASE_URL,
-  timeout: 15000,
+  // Gemini y Stripe pueden tardar algunos segundos en responder.
+  timeout: 30000,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -32,30 +34,61 @@ instancia.interceptors.request.use((config) => {
 const MENSAJES: Record<number, string> = {
   400: 'Los datos enviados no son validos. Revisa el formulario.',
   401: 'Tu sesion expiro. Vuelve a iniciar sesion.',
-  403: 'No tienes permisos para realizar esta accion.',
+  403: 'Esta accion no esta disponible para tu cuenta.',
   404: 'No encontramos la informacion solicitada.',
   409: 'La operacion no se pudo completar por un conflicto con datos existentes.',
-  422: 'Algunos datos no cumplen con lo requerido.',
+  429: 'Hiciste muchas consultas seguidas. Espera un minuto e intenta de nuevo.',
   500: 'Ocurrio un problema en el servidor. Intenta nuevamente en unos minutos.',
 };
 
+const TRADUCCIONES: Record<string, string> = {
+  'Invalid email or password': 'Correo o contrasena incorrectos.',
+  'Email is already registered': 'Ya existe una cuenta registrada con ese correo.',
+  'User is inactive or no longer exists': 'Tu cuenta esta desactivada o ya no existe.',
+  Unauthorized: 'Tu sesion expiro. Vuelve a iniciar sesion.',
+  'password must contain at least one uppercase letter, one lowercase letter and one number':
+    'La contrasena necesita una mayuscula, una minuscula y un numero.',
+  'No active branch has enough available stock for this variant':
+    'Ninguna sucursal tiene suficientes unidades de esta prenda. Revisa la cantidad.',
+  'Product or variant is no longer available': 'La prenda o la combinacion de talla y color ya no esta disponible.',
+  'A cart can contain at most 50 variants': 'El carrito admite como maximo 50 prendas diferentes.',
+  'Cart changed concurrently; retry the operation': 'El carrito cambio. Revisa los datos y vuelve a intentarlo.',
+  'Cart or prices changed; request a new checkout preview':
+    'El carrito o los precios cambiaron. Revisa el nuevo total antes de confirmar.',
+  'Stripe is not configured': 'El pago con tarjeta no esta habilitado en el servidor.',
+  'Stripe is unavailable; retry the same operation': 'La pasarela no responde. Intenta nuevamente.',
+  'Sale is no longer awaiting payment': 'El pedido ya no esta pendiente de pago.',
+  'Checkout expired; create a new checkout': 'El tiempo para pagar vencio. Vuelve a confirmar tu compra.',
+  'approximateTime must be in the future': 'La visita debe ser en una fecha y hora futura.',
+  'The reservation is already closed': 'La reserva ya esta cerrada.',
+  'The reservation expired and its stock was released': 'La reserva vencio y las prendas se liberaron.',
+  'Stock or reservation changed concurrently; retry the operation':
+    'El stock cambio durante la operacion. Vuelve a intentarlo.',
+  'Too many AI requests; wait a minute and retry': 'Hiciste muchas consultas al asistente. Espera un minuto.',
+};
+
+function traducir(mensaje: string): string {
+  if (TRADUCCIONES[mensaje]) return TRADUCCIONES[mensaje];
+  if (/^(Insufficient stock|Unavailable product\/variant)/.test(mensaje))
+    return 'Una prenda ya no tiene suficientes unidades en la sucursal elegida.';
+  return mensaje;
+}
+
 function normalizarError(error: unknown): ErrorApi {
   if (error instanceof ErrorApi) return error;
-
   if (axios.isAxiosError(error)) {
     const err = error as AxiosError<{ message?: string | string[] }>;
     const status = err.response?.status ?? 0;
     if (!err.response) {
-      return new ErrorApi('No pudimos conectar con el servidor. Verifica tu conexion.', 0);
+      return new ErrorApi('No pudimos conectar con el servidor. Revisa tu conexion y la direccion de la API.', 0);
     }
     const detalle = err.response.data?.message;
-    const mensaje =
-      (Array.isArray(detalle) ? detalle[0] : detalle) ??
-      MENSAJES[status] ??
-      'No pudimos completar la operacion.';
-    return new ErrorApi(mensaje, status);
+    const primero = Array.isArray(detalle) ? detalle[0] : detalle;
+    return new ErrorApi(
+      primero ? traducir(primero) : (MENSAJES[status] ?? 'No pudimos completar la operacion.'),
+      status,
+    );
   }
-
   return new ErrorApi('Ocurrio un error inesperado.', 0);
 }
 
@@ -65,20 +98,19 @@ type Metodo = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export type ParamsConsulta = Record<string, unknown>;
 
-async function peticion<T>(
-  metodo: Metodo,
-  url: string,
-  datos?: unknown,
-  config?: AxiosRequestConfig,
-): Promise<T> {
+async function peticion<T>(metodo: Metodo, url: string, datos?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  const token = obtenerToken();
   try {
     if (USAR_MOCKS) {
       return await mockRequest<T>(metodo, url, datos, config?.params as ParamsConsulta);
     }
-    const respuesta = await instancia.request<T>({ method: metodo, url, data: datos, ...config });
-    return respuesta.data;
+    const respuesta = await instancia.request<RespuestaBackend<T>>({ method: metodo, url, data: datos, ...config });
+    return desenvolverRespuesta(respuesta.data);
   } catch (error) {
-    throw normalizarError(error);
+    const normalizado = normalizarError(error);
+    // Un token vencido no debe dejar a la app en un estado de sesion falso.
+    if (normalizado.status === 401 && token && token === obtenerToken()) guardarToken(null);
+    throw normalizado;
   }
 }
 

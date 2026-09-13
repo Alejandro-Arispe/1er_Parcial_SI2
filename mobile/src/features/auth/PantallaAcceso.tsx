@@ -209,7 +209,7 @@ function FormularioRegistro({ onListo }: { onListo: () => void }) {
         etiqueta="Contrasena"
         value={datos.password}
         onChangeText={(password) => setDatos((d) => ({ ...d, password }))}
-        placeholder="Minimo 6 caracteres"
+        placeholder="8+ caracteres, mayuscula, minuscula y numero"
         secreto
         autoCapitalize="none"
         error={errores.password}

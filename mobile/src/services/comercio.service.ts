@@ -1,29 +1,25 @@
 /**
- * Carrito, reservas, ventas y pagos del cliente.
- * Endpoints esperados:
- *   GET    /carrito               -> Carrito
- *   POST   /carrito/items         -> Carrito
- *   PATCH  /carrito/items/:id     -> Carrito
- *   DELETE /carrito/items/:id     -> Carrito
- *   DELETE /carrito               -> Carrito vacio
- *   GET    /reservas              -> Paginado<Reserva>
- *   POST   /reservas              -> Reserva
- *   POST   /reservas/:id/cancelar -> Reserva
- *   GET    /ventas                -> Paginado<Venta>
- *   POST   /ventas                -> Venta
+ * Carrito, reservas y compras del cliente autenticado.
+ *   GET/POST/PATCH/DELETE /cart, /cart/items[/:id]
+ *   GET /reservations/mine, GET /reservations/:id, POST /reservations, PATCH /reservations/:id/cancel
+ *   GET /sales/mine, GET /sales/:id
  */
-import { api } from '../api/http';
+import { api, USAR_MOCKS } from '../api/http';
 import { endpoints } from '../api/endpoints';
-import type { Paginado, ParamsPaginacion } from '../types/api';
-import type {
-  CanalVenta,
-  Carrito,
-  EstadoReserva,
-  MetodoPago,
-  Reserva,
-  TipoPago,
-  Venta,
-} from '../types/domain';
+import { adaptarPagina, type PaginaBackend } from '../api/contratos';
+import {
+  adaptarCarrito,
+  adaptarReserva,
+  adaptarVenta,
+  CANALES_API,
+  estadoReservaApi,
+  type CarritoBackend,
+  type ReservaBackend,
+  type VentaBackend,
+} from '../api/comercio.contratos';
+import { rutasMock } from '../mocks/endpoints';
+import { ErrorApi, type Paginado, type ParamsPaginacion } from '../types/api';
+import type { CanalVenta, Carrito, EstadoReserva, Reserva, Venta } from '../types/domain';
 
 export interface LineaSeleccion {
   id_producto: number;
@@ -39,65 +35,100 @@ export interface DatosReserva {
   detalles: LineaSeleccion[];
 }
 
-export interface DatosVenta {
-  canal: CanalVenta;
-  id_sucursal: number | null;
-  id_reserva?: number | null;
-  detalles: LineaSeleccion[];
-  pago: { metodo: MetodoPago; tipo?: TipoPago; referencia_externa?: string };
-}
-
 export interface FiltrosReserva extends ParamsPaginacion {
   estado?: EstadoReserva;
 }
 
 export interface FiltrosVenta extends ParamsPaginacion {
   canal?: CanalVenta;
-  desde?: string;
-  hasta?: string;
 }
 
+function cantidadValida(cantidad: number) {
+  if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > 100)
+    throw new ErrorApi('La cantidad debe estar entre 1 y 100 unidades.', 400);
+}
+
+const variante = (l: LineaSeleccion) => ({
+  productId: l.id_producto,
+  sizeId: l.id_talla,
+  colorId: l.id_color,
+  quantity: l.cantidad,
+});
+
 export const carritoService = {
-  obtener() {
-    return api.get<Carrito>(endpoints.carrito.actual);
+  async obtener(): Promise<Carrito> {
+    if (USAR_MOCKS) return api.get<Carrito>(rutasMock.carrito.actual);
+    return adaptarCarrito(await api.get<CarritoBackend>(endpoints.carrito.actual));
   },
-  agregar(linea: LineaSeleccion) {
-    return api.post<Carrito>(endpoints.carrito.items, linea);
+  async agregar(linea: LineaSeleccion): Promise<Carrito> {
+    cantidadValida(linea.cantidad);
+    if (USAR_MOCKS) return api.post<Carrito>(rutasMock.carrito.items, linea);
+    return adaptarCarrito(await api.post<CarritoBackend>(endpoints.carrito.items, variante(linea)));
   },
-  cambiarCantidad(idDetalle: number, cantidad: number) {
-    return api.patch<Carrito>(endpoints.carrito.item(idDetalle), { cantidad });
+  async cambiarCantidad(idDetalle: number, cantidad: number): Promise<Carrito> {
+    cantidadValida(cantidad);
+    if (USAR_MOCKS) return api.patch<Carrito>(rutasMock.carrito.item(idDetalle), { cantidad });
+    return adaptarCarrito(await api.patch<CarritoBackend>(endpoints.carrito.item(idDetalle), { quantity: cantidad }));
   },
-  quitar(idDetalle: number) {
-    return api.delete<Carrito>(endpoints.carrito.item(idDetalle));
+  async quitar(idDetalle: number): Promise<Carrito> {
+    if (USAR_MOCKS) return api.delete<Carrito>(rutasMock.carrito.item(idDetalle));
+    return adaptarCarrito(await api.delete<CarritoBackend>(endpoints.carrito.item(idDetalle)));
   },
-  vaciar() {
-    return api.delete<Carrito>(endpoints.carrito.vaciar);
+  async vaciar(): Promise<Carrito> {
+    if (USAR_MOCKS) return api.delete<Carrito>(rutasMock.carrito.vaciar);
+    return adaptarCarrito(await api.delete<CarritoBackend>(endpoints.carrito.vaciar));
   },
 };
 
 export const reservasService = {
-  listar(filtros: FiltrosReserva = {}) {
-    return api.get<Paginado<Reserva>>(endpoints.reservas.lista, filtros);
+  async listar(filtros: FiltrosReserva = {}): Promise<Paginado<Reserva>> {
+    if (USAR_MOCKS) return api.get<Paginado<Reserva>>(rutasMock.reservas.lista, filtros);
+    return adaptarPagina(
+      await api.get<PaginaBackend<ReservaBackend>>(endpoints.reservas.propias, {
+        page: filtros.page ?? 1,
+        limit: filtros.page_size ?? 20,
+        status: filtros.estado ? estadoReservaApi(filtros.estado) : undefined,
+      }),
+      adaptarReserva,
+    );
   },
-  obtener(id: number) {
-    return api.get<Reserva>(endpoints.reservas.detalle(id));
+  async obtener(id: number): Promise<Reserva> {
+    if (USAR_MOCKS) return api.get<Reserva>(rutasMock.reservas.detalle(id));
+    return adaptarReserva(await api.get<ReservaBackend>(endpoints.reservas.detalle(id)));
   },
-  crear(datos: DatosReserva) {
-    return api.post<Reserva>(endpoints.reservas.crear, datos);
+  async crear(datos: DatosReserva): Promise<Reserva> {
+    if (Date.parse(datos.horario_aproximado) <= Date.now())
+      throw new ErrorApi('Elige un horario de visita que todavia no haya pasado.', 400);
+    if (USAR_MOCKS) return api.post<Reserva>(rutasMock.reservas.lista, datos);
+    return adaptarReserva(
+      await api.post<ReservaBackend>(endpoints.reservas.crear, {
+        branchId: datos.id_sucursal,
+        approximateTime: datos.horario_aproximado,
+        observation: datos.observacion || undefined,
+        items: datos.detalles.map(variante),
+      }),
+    );
   },
-  cancelar(id: number) {
-    return api.post<Reserva>(endpoints.reservas.cancelar(id));
+  async cancelar(id: number): Promise<Reserva> {
+    if (USAR_MOCKS) return api.post<Reserva>(rutasMock.reservas.cancelar(id));
+    return adaptarReserva(await api.patch<ReservaBackend>(endpoints.reservas.cancelar(id)));
   },
 };
 
 export const ventasService = {
-  listar(filtros: FiltrosVenta = {}) {
-    return api.get<Paginado<Venta>>(endpoints.ventas.lista, filtros);
+  async listar(filtros: FiltrosVenta = {}): Promise<Paginado<Venta>> {
+    if (USAR_MOCKS) return api.get<Paginado<Venta>>(rutasMock.ventas.lista, filtros);
+    return adaptarPagina(
+      await api.get<PaginaBackend<VentaBackend>>(endpoints.ventas.propias, {
+        page: filtros.page ?? 1,
+        limit: filtros.page_size ?? 20,
+        channel: filtros.canal ? CANALES_API[filtros.canal] : undefined,
+      }),
+      adaptarVenta,
+    );
   },
-  obtener(id: number) {
-    return api.get<Venta>(endpoints.ventas.detalle(id));
-  },
-  registrar(datos: DatosVenta) {
-    return api.post<Venta>(endpoints.ventas.crear, datos);
+  async obtener(id: number): Promise<Venta> {
+    if (USAR_MOCKS) return api.get<Venta>(rutasMock.ventas.detalle(id));
+    return adaptarVenta(await api.get<VentaBackend>(endpoints.ventas.detalle(id)));
   },
 };

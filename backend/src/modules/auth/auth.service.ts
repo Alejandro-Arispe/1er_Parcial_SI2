@@ -4,6 +4,7 @@ import { compare } from 'bcrypt';
 import { Role } from '../../common/enums/role.enum.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
+import { UpdateProfileDto } from './dto/update-profile.dto.js';
 import { UsersService } from '../users/users.service.js';
 
 export interface JwtPayload {
@@ -48,6 +49,10 @@ export class AuthService {
 
   me(userId: number) {
     return this.usersService.findOne(userId);
+  }
+
+  updateProfile(userId: number, dto: UpdateProfileDto) {
+    return this.usersService.updateOwnProfile(userId, dto);
   }
 
   private async createSession<T extends TokenUser>(user: T) {

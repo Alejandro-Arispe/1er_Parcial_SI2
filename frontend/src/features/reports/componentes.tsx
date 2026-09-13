@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import type { PuntoPeriodo, TotalPorSucursal } from '../../types/reportes';
+import type { PuntoHora, PuntoPeriodo, TotalPorSucursal } from '../../types/reportes';
 import { moneda } from '../../lib/format';
 
 const ACENTO = '#8c2f39';
@@ -95,6 +95,30 @@ export function GraficoSucursales({ datos }: { datos: TotalPorSucursal[] }) {
             contentStyle={{ borderRadius: 8, border: `1px solid ${BORDE}`, fontSize: 12 }}
           />
           <Bar dataKey="total" fill={ACENTO} radius={[6, 6, 0, 0]} maxBarSize={56} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+/** Ventas por hora local: ayuda a planificar personal de caja. */
+export function GraficoHoras({ datos }: { datos: PuntoHora[] }) {
+  const filas = datos.map((d) => ({ ...d, etiqueta: `${String(d.hora).padStart(2, '0')}:00` }));
+  return (
+    <div style={{ width: '100%', height: 240 }}>
+      <ResponsiveContainer>
+        <BarChart data={filas} margin={{ top: 8, right: 8, bottom: 0, left: -12 }}>
+          <CartesianGrid stroke={BORDE} vertical={false} />
+          <XAxis dataKey="etiqueta" tick={{ fontSize: 11, fill: TINTA }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+          <YAxis tick={{ fontSize: 11, fill: TINTA }} axisLine={false} tickLine={false} width={64} />
+          <Tooltip
+            formatter={(valor, _nombre, item) => [
+              `${moneda(Number(valor))} (${(item?.payload as PuntoHora | undefined)?.cantidad ?? 0} ventas)`,
+              'Ventas',
+            ]}
+            contentStyle={{ borderRadius: 8, border: `1px solid ${BORDE}`, fontSize: 12 }}
+          />
+          <Bar dataKey="total" fill={ACENTO} radius={[4, 4, 0, 0]} maxBarSize={32} />
         </BarChart>
       </ResponsiveContainer>
     </div>

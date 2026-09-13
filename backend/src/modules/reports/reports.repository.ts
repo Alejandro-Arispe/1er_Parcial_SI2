@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import {
+  CashShiftsReportQueryDto,
   InventoryReportQueryDto,
   SalesReportQueryDto,
 } from './dto/report-query.dto.js';
@@ -37,24 +38,73 @@ export class ReportsRepository {
     const base = this.salesBase(query, period);
     const metrics = Prisma.sql`COUNT(*)::int AS "saleCount", SUM(v.units) AS "unitsSold",
       SUM(v.total) AS "revenue", ROUND(AVG(v.total), 2) AS "averageTicket"`;
-    const [totals, byBranch, byChannel, daily] = await this.prisma.$transaction(
-      [
-        this.prisma
-          .$queryRaw`${base} SELECT v.moneda AS currency, ${metrics} FROM sales v GROUP BY v.moneda ORDER BY v.moneda`,
-        this.prisma
-          .$queryRaw`${base} SELECT v.id_sucursal AS "branchId", s.nombre AS "branchName", v.moneda AS currency, ${metrics}
+    const [totals, byBranch, byChannel, daily, hourly] =
+      await this.prisma.$transaction(
+        [
+          this.prisma
+            .$queryRaw`${base} SELECT v.moneda AS currency, ${metrics} FROM sales v GROUP BY v.moneda ORDER BY v.moneda`,
+          this.prisma
+            .$queryRaw`${base} SELECT v.id_sucursal AS "branchId", s.nombre AS "branchName", v.moneda AS currency, ${metrics}
         FROM sales v LEFT JOIN sucursales s ON s.id_sucursal = v.id_sucursal
         GROUP BY v.id_sucursal, s.nombre, v.moneda ORDER BY v.id_sucursal, v.moneda`,
-        this.prisma
-          .$queryRaw`${base} SELECT v.canal::text AS channel, v.moneda AS currency, ${metrics}
+          this.prisma
+            .$queryRaw`${base} SELECT v.canal::text AS channel, v.moneda AS currency, ${metrics}
         FROM sales v GROUP BY v.canal, v.moneda ORDER BY v.canal, v.moneda`,
-        this.prisma
-          .$queryRaw`${base} SELECT (v.reporting_date AT TIME ZONE 'America/La_Paz')::date::text AS date, v.moneda AS currency, ${metrics}
+          this.prisma
+            .$queryRaw`${base} SELECT (v.reporting_date AT TIME ZONE 'America/La_Paz')::date::text AS date, v.moneda AS currency, ${metrics}
         FROM sales v GROUP BY date, v.moneda ORDER BY date, v.moneda`,
+          // Hora local de Bolivia (0-23) para detectar horarios de mayor venta.
+          this.prisma
+            .$queryRaw`${base} SELECT EXTRACT(HOUR FROM (v.reporting_date AT TIME ZONE 'America/La_Paz'))::int AS hour, v.moneda AS currency, ${metrics}
+        FROM sales v GROUP BY hour, v.moneda ORDER BY hour, v.moneda`,
+        ],
+        { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+      );
+    return { totals, byBranch, byChannel, daily, hourly };
+  }
+
+  /** Turnos abiertos en el periodo, agregados por moneda y por caja. */
+  async cashShifts(query: CashShiftsReportQueryDto, period: Period) {
+    const base = Prisma.sql`WITH shifts AS (
+      SELECT t.id_turno AS id, t.id_caja AS "registerId", c.nombre AS "registerName",
+        c.id_sucursal AS "branchId", s.nombre AS "branchName", u.nombre AS cashier,
+        t.fecha_apertura AS "openedAt", t.fecha_cierre AS "closedAt", t.moneda AS currency,
+        t.saldo_inicial AS "openingCash", t.ventas_efectivo AS cash, t.ventas_tarjeta AS card,
+        t.ventas_qr AS qr, t.ventas_transferencia AS transfer,
+        t.ventas_efectivo + t.ventas_tarjeta + t.ventas_qr + t.ventas_transferencia AS total,
+        t.cantidad_ventas AS "saleCount", t.saldo_inicial + t.ventas_efectivo AS "expectedCash",
+        t.efectivo_contado AS "countedCash",
+        CASE WHEN t.efectivo_contado IS NULL THEN NULL
+          ELSE t.efectivo_contado - (t.saldo_inicial + t.ventas_efectivo) END AS difference
+      FROM turnos_caja t
+      JOIN cajas c ON c.id_caja = t.id_caja
+      JOIN sucursales s ON s.id_sucursal = c.id_sucursal
+      JOIN usuarios u ON u.id_usuario = t.id_usuario
+      WHERE t.fecha_apertura >= ${period.start} AND t.fecha_apertura < ${period.endExclusive}
+        ${query.branchId ? Prisma.sql`AND c.id_sucursal = ${query.branchId}` : Prisma.empty}
+        ${query.registerId ? Prisma.sql`AND t.id_caja = ${query.registerId}` : Prisma.empty}
+    )`;
+    const metrics = Prisma.sql`COUNT(*)::int AS "shiftCount",
+      COUNT(*) FILTER (WHERE "closedAt" IS NULL)::int AS "openShifts",
+      COALESCE(SUM("saleCount"), 0)::int AS "saleCount",
+      COALESCE(SUM(cash), 0) AS cash, COALESCE(SUM(card), 0) AS card,
+      COALESCE(SUM(qr), 0) AS qr, COALESCE(SUM(transfer), 0) AS transfer,
+      COALESCE(SUM(total), 0) AS total, COALESCE(SUM(difference), 0) AS difference,
+      COUNT(*) FILTER (WHERE difference <> 0)::int AS "shiftsWithDifference"`;
+    const [totals, byRegister, shifts] = await this.prisma.$transaction(
+      [
+        this.prisma
+          .$queryRaw`${base} SELECT currency, ${metrics} FROM shifts GROUP BY currency ORDER BY currency`,
+        this.prisma
+          .$queryRaw`${base} SELECT "registerId", "registerName", "branchId", "branchName", currency, ${metrics}
+        FROM shifts GROUP BY "registerId", "registerName", "branchId", "branchName", currency
+        ORDER BY "branchId", "registerId", currency`,
+        this.prisma
+          .$queryRaw`${base} SELECT * FROM shifts ORDER BY "openedAt" DESC, id DESC LIMIT 100`,
       ],
       { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
     );
-    return { totals, byBranch, byChannel, daily };
+    return { totals, byRegister, shifts };
   }
 
   topProducts(query: SalesReportQueryDto & { limit: number }, period: Period) {

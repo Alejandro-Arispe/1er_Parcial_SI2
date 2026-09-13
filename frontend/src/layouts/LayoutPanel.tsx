@@ -2,14 +2,22 @@
 import { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { CampanaNotificaciones } from '../features/notifications/CampanaNotificaciones';
+import { RolNombre } from '../types/domain';
 import { iniciales } from '../lib/format';
 import { navegacionPorRol } from '../routes/navegacion';
 
 export function LayoutPanel() {
-  const { usuario, roles, cerrarSesion } = useAuth();
+  const { usuario, roles, cerrarSesion, tieneRol } = useAuth();
   const [abierto, setAbierto] = useState(false);
   const navegar = useNavigate();
   const grupos = navegacionPorRol(roles);
+  // NestJS solo notifica a administradores y encargados.
+  const rutaReservas = tieneRol(RolNombre.ADMINISTRADOR)
+    ? '/admin/reservas'
+    : tieneRol(RolNombre.ENCARGADO_SUCURSAL)
+      ? '/sucursal/reservas'
+      : null;
 
   async function salir() {
     await cerrarSesion();
@@ -59,6 +67,7 @@ export function LayoutPanel() {
           </button>
           <div className="fs-crecer" />
           <div className="fs-fila">
+            {rutaReservas && <CampanaNotificaciones rutaReservas={rutaReservas} />}
             <div style={{ textAlign: 'right' }}>
               <p style={{ fontWeight: 600, fontSize: '0.88rem' }}>{usuario?.nombre}</p>
               <p className="fs-sub" style={{ fontSize: '0.75rem' }}>

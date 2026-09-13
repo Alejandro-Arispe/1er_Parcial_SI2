@@ -21,6 +21,7 @@ const PaginaDetalleCompra = lazy(() => import('./features/sales/PaginaDetalleCom
 /* Autenticacion */
 const PaginaLogin = lazy(() => import('./features/auth/PaginaLogin'));
 const PaginaRegistro = lazy(() => import('./features/auth/PaginaRegistro'));
+const PaginaPerfil = lazy(() => import('./features/auth/PaginaPerfil'));
 
 /* Administracion */
 const PaginaDashboard = lazy(() => import('./features/admin/PaginaDashboard'));
@@ -39,6 +40,7 @@ const PaginaReservasOperacion = lazy(() => import('./features/reservations/Pagin
 const PaginaVentasOperacion = lazy(() => import('./features/sales/PaginaVentasOperacion'));
 const PaginaMovimientos = lazy(() => import('./features/inventory/PaginaMovimientos'));
 const PaginaReportes = lazy(() => import('./features/reports/PaginaReportes'));
+const PaginaReporteIA = lazy(() => import('./features/reports/PaginaReporteIA'));
 
 /* Caja y proveedor */
 const PaginaOffline = lazy(() => import('./features/pos/PaginaOffline'));
@@ -126,6 +128,14 @@ export default function App() {
               </RutaProtegida>
             }
           />
+          <Route
+            path="mi-perfil"
+            element={
+              <RutaProtegida>
+                <PaginaPerfil />
+              </RutaProtegida>
+            }
+          />
           <Route path="sin-permisos" element={<SinPermisos />} />
           <Route path="*" element={<NoEncontrada />} />
         </Route>
@@ -159,6 +169,7 @@ export default function App() {
           <Route path="reservas" element={<PaginaReservasOperacion />} />
           <Route path="ventas" element={<PaginaVentasOperacion />} />
           <Route path="reportes" element={<PaginaReportes />} />
+          <Route path="reportes-ia" element={<PaginaReporteIA />} />
         </Route>
 
         {/* --- sucursal --- */}
@@ -175,6 +186,8 @@ export default function App() {
           <Route path="inventario" element={<PaginaInventarioAdmin />} />
           <Route path="movimientos" element={<PaginaMovimientos />} />
           <Route path="ventas" element={<PaginaVentasOperacion />} />
+          <Route path="reportes" element={<PaginaReportes />} />
+          <Route path="reportes-ia" element={<PaginaReporteIA />} />
         </Route>
 
         {/* --- caja --- */}

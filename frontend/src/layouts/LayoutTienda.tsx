@@ -95,9 +95,9 @@ export function LayoutTienda() {
 
             {autenticado ? (
               <div className="fs-cuenta">
-                <span className="fs-avatar" title={usuario?.nombre}>
+                <Link to="/mi-perfil" className="fs-avatar" title="Mi perfil" aria-label="Mi perfil">
                   {iniciales(usuario?.nombre ?? '')}
-                </span>
+                </Link>
                 <button type="button" className="fs-btn fs-btn--fantasma fs-btn--s" onClick={salir}>
                   Salir
                 </button>
@@ -131,6 +131,7 @@ export function LayoutTienda() {
           </div>
           <div>
             <p className="fs-eyebrow">Cuenta</p>
+            <Link to="/mi-perfil" className="fs-footer__enlace">Mi perfil</Link>
             <Link to="/mis-compras" className="fs-footer__enlace">Mis compras</Link>
             <Link to="/mis-reservas" className="fs-footer__enlace">Mis reservas</Link>
             <Link to="/login" className="fs-footer__enlace">Iniciar sesion</Link>
