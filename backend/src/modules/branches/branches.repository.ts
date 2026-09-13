@@ -8,6 +8,7 @@ const branchSelect = {
   city: true,
   address: true,
   phone: true,
+  warehouseName: true,
   active: true,
   _count: {
     select: {
@@ -75,7 +76,10 @@ export class BranchesRepository {
   }
 
   create(data: Prisma.BranchCreateInput) {
-    return this.prisma.branch.create({ data, select: branchSelect });
+    return this.prisma.branch.create({
+      data: { ...data, cashRegisters: { create: { name: 'Caja 1' } } },
+      select: branchSelect,
+    });
   }
 
   update(id: number, data: Prisma.BranchUpdateInput) {

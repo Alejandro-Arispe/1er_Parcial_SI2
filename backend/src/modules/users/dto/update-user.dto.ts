@@ -1,6 +1,7 @@
 import { Type, Transform } from 'class-transformer';
 import {
   IsBoolean,
+  ValidateIf,
   IsEmail,
   IsInt,
   IsOptional,
@@ -12,6 +13,12 @@ import {
 } from 'class-validator';
 
 export class UpdateUserDto {
+  // Explicit null removes the association; omission preserves it.
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @IsPositive()
+  supplierId?: number | null;
   @IsOptional()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
@@ -50,6 +57,11 @@ export class UpdateUserDto {
   @IsString()
   @MaxLength(250)
   address?: string;
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @Transform(({ obj, key }) => obj[key])
+  @IsBoolean()
+  wholesale?: boolean;
 
   @IsOptional()
   @Type(() => Number)

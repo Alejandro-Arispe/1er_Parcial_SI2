@@ -81,6 +81,12 @@ export class UsersService {
 
   async update(id: number, dto: UpdateUserDto) {
     const current = await this.findOne(id);
+    if (dto.supplierId != null && dto.supplierId !== current.supplierId) {
+      await this.validateSupplier(
+        dto.supplierId,
+        current.roles.some((r) => r.role.name === 'SUPPLIER'),
+      );
+    }
 
     if (dto.email && dto.email !== current.email) {
       const existing = await this.findByEmailForAuthentication(dto.email);
@@ -103,7 +109,9 @@ export class UsersService {
       );
     }
     if (
-      (dto.phone !== undefined || dto.address !== undefined) &&
+      (dto.phone !== undefined ||
+        dto.address !== undefined ||
+        dto.wholesale !== undefined) &&
       !current.client
     ) {
       throw new BadRequestException(
@@ -119,12 +127,20 @@ export class UsersService {
       id,
       {
         name: dto.name,
+        supplier:
+          dto.supplierId === undefined
+            ? undefined
+            : dto.supplierId === null
+              ? { disconnect: true }
+              : { connect: { id: dto.supplierId } },
         email: dto.email,
         active: dto.active,
         passwordHash,
       },
-      dto.phone !== undefined || dto.address !== undefined
-        ? { phone: dto.phone, address: dto.address }
+      dto.phone !== undefined ||
+        dto.address !== undefined ||
+        dto.wholesale !== undefined
+        ? { phone: dto.phone, address: dto.address, wholesale: dto.wholesale }
         : undefined,
       dto.branchId !== undefined || dto.jobTitle !== undefined
         ? { branchId: dto.branchId, jobTitle: dto.jobTitle }
@@ -142,6 +158,11 @@ export class UsersService {
     roles: Role[],
   ) {
     const email = data.email.trim().toLowerCase();
+    if (data.supplierId != null)
+      await this.validateSupplier(
+        data.supplierId,
+        roles.includes(Role.SUPPLIER),
+      );
     if (await this.findByEmailForAuthentication(email)) {
       throw new ConflictException('Email is already registered');
     }
@@ -155,6 +176,8 @@ export class UsersService {
       );
     }
 
+    if (data.wholesale && !roles.includes(Role.CUSTOMER))
+      throw new BadRequestException('Solo un cliente puede ser mayorista');
     const requiresEmployee = roles.some((role) => employeeRoles.has(role));
     if (requiresEmployee && !data.branchId) {
       throw new BadRequestException(
@@ -173,12 +196,17 @@ export class UsersService {
     const passwordHash = await hash(data.password, this.passwordSaltRounds);
     return this.usersRepository.create({
       name: data.name.trim(),
+      supplierId: data.supplierId,
       email,
       passwordHash,
       active: data.active ?? true,
       roleIds: roleRecords.map((role) => role.id),
       client: roles.includes(Role.CUSTOMER)
-        ? { phone: data.phone, address: data.address }
+        ? {
+            phone: data.phone,
+            address: data.address,
+            wholesale: data.wholesale ?? false,
+          }
         : undefined,
       employee: requiresEmployee
         ? {
@@ -189,5 +217,14 @@ export class UsersService {
           }
         : undefined,
     });
+  }
+
+  private async validateSupplier(id: number, hasRole: boolean) {
+    if (!hasRole)
+      throw new BadRequestException(
+        'Asigna primero el rol PROVEEDOR para vincular la cuenta.',
+      );
+    if (!(await this.usersRepository.supplierExists(id)))
+      throw new BadRequestException('El proveedor no existe o esta inactivo.');
   }
 }

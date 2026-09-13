@@ -23,4 +23,11 @@ export class CreateBranchDto {
   @IsString()
   @MaxLength(30)
   phone?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  warehouseName?: string;
 }

@@ -20,6 +20,8 @@ import * as mock from '../mocks/servicios/organizacion';
 import { catalogoService } from './catalogo.service';
 
 export interface DatosUsuario {
+  id_proveedor?: number | null;
+  mayorista?: boolean;
   nombre: string;
   email: string;
   password?: string;
@@ -51,6 +53,7 @@ async function listarSucursales(active: boolean) {
 const sucursalDto = (d: Partial<Sucursal>, crear = false) => ({
   name: d.nombre?.trim(),
   city: d.ciudad?.trim(),
+  warehouseName: d.nombre_almacen?.trim(),
   address: d.direccion?.trim(),
   phone: d.telefono,
   ...(!crear ? { active: d.activa } : {}),
@@ -159,14 +162,17 @@ export const rolesService = {
 
 export function usuarioParaApi(
   d: Partial<DatosUsuario>,
-  perfiles: { cliente: boolean; empleado: boolean },
+  perfiles: { cliente: boolean; empleado: boolean; proveedor?: boolean },
 ) {
   return {
     name: d.nombre?.trim(),
     email: d.email?.trim(),
     password: d.password || undefined,
     active: d.activo,
-    ...(perfiles.cliente ? { phone: d.telefono, address: d.direccion } : {}),
+    ...(perfiles.proveedor ? { supplierId: d.id_proveedor } : {}),
+    ...(perfiles.cliente
+      ? { phone: d.telefono, address: d.direccion, wholesale: d.mayorista }
+      : {}),
     ...(perfiles.empleado
       ? { branchId: d.id_sucursal || undefined, jobTitle: d.cargo || undefined }
       : {}),
@@ -204,6 +210,7 @@ export const usuariosService = USAR_MOCKS
           await api.post<UsuarioBackend>(endpoints.usuarios.lista, {
             ...usuarioParaApi(d, {
               cliente: roles.includes('CUSTOMER'),
+              proveedor: roles.includes('SUPPLIER'),
               empleado: roles.some((r) => r === 'CASHIER' || r === 'BRANCH_MANAGER'),
             }),
             roles,
@@ -218,6 +225,7 @@ export const usuariosService = USAR_MOCKS
             endpoints.usuarios.detalle(id),
             usuarioParaApi(d, {
               cliente: Boolean(actual.client),
+              proveedor: Boolean(actual.supplier) || actual.roles.some(r => r.role.name === 'SUPPLIER'),
               empleado: Boolean(actual.employee),
             }),
           ),

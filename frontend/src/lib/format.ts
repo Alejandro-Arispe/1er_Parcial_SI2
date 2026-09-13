@@ -18,8 +18,8 @@ const fechaHoraFmt = new Intl.DateTimeFormat('es-BO', {
   minute: '2-digit',
 });
 
-export function moneda(valor: number): string {
-  return monedaFmt.format(valor ?? 0);
+export function moneda(valor: number, codigo = 'BOB'): string {
+  return codigo === 'BOB' ? monedaFmt.format(valor ?? 0) : new Intl.NumberFormat('es-BO', { style: 'currency', currency: codigo }).format(valor ?? 0);
 }
 
 export function fecha(valor: string | Date | null | undefined): string {

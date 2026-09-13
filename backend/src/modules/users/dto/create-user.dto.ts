@@ -4,6 +4,7 @@ import {
   ArrayUnique,
   IsArray,
   IsBoolean,
+  ValidateIf,
   IsEmail,
   IsEnum,
   IsInt,
@@ -17,6 +18,11 @@ import {
 import { Role } from '../../../common/enums/role.enum.js';
 
 export class CreateUserDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @IsPositive()
+  supplierId?: number;
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @MinLength(2)
@@ -58,6 +64,11 @@ export class CreateUserDto {
   @IsString()
   @MaxLength(250)
   address?: string;
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @Transform(({ obj, key }) => obj[key])
+  @IsBoolean()
+  wholesale?: boolean;
 
   @IsOptional()
   @Type(() => Number)

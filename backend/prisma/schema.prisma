@@ -94,6 +94,8 @@ enum PaymentStatus {
 }
 
 model User {
+  supplierId Int? @map("id_proveedor")
+  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   id           Int        @id @default(autoincrement()) @map("id_usuario")
   name         String     @map("nombre") @db.VarChar(120)
   email        String     @unique @db.VarChar(180)
@@ -105,12 +107,15 @@ model User {
   employee     Employee?
   roles        UserRole[]
   createdSales Sale[] @relation("SaleCreator")
+  cashShifts CashShift[]
   notificationReads NotificationRead[]
 
+  @@index([supplierId])
   @@map("usuarios")
 }
 
 model Client {
+  wholesale       Boolean            @default(false) @map("mayorista")
   id              Int                @id @default(autoincrement()) @map("id_cliente")
   userId          Int                @unique @map("id_usuario")
   phone           String?            @map("telefono") @db.VarChar(30)
@@ -161,6 +166,8 @@ model UserRole {
 }
 
 model Branch {
+  /// MVP: un solo almacen por sucursal; comparte su identificador y existencias.
+  warehouseName String        @default("Almacen principal") @map("nombre_almacen") @db.VarChar(120)
   id           Int           @id @default(autoincrement()) @map("id_sucursal")
   name         String        @map("nombre") @db.VarChar(120)
   city         String        @map("ciudad") @db.VarChar(100)
@@ -172,6 +179,7 @@ model Branch {
   reservations Reservation[]
   sales        Sale[]
   notifications Notification[]
+  cashRegisters CashRegister[]
 
   @@unique([city, name])
   @@index([city, active])
@@ -215,6 +223,7 @@ model Collection {
 }
 
 model Supplier {
+  accounts User[]
   id       Int       @id @default(autoincrement()) @map("id_proveedor")
   name     String    @unique @map("nombre") @db.VarChar(150)
   contact  String?   @map("contacto") @db.VarChar(120)
@@ -252,6 +261,9 @@ model Color {
 }
 
 model Product {
+  supplierAvailability String? @map("disponibilidad_proveedor") @db.VarChar(500)
+  wholesalePrice   Decimal?           @map("precio_mayorista") @db.Decimal(12, 2)
+  imageUrls        String[]           @default([]) @map("imagenes")
   id               Int                @id @default(autoincrement()) @map("id_producto")
   categoryId       Int                @map("id_categoria")
   seasonId         Int                @map("id_temporada")
@@ -425,7 +437,67 @@ model CartItem {
   @@map("detalles_carrito")
 }
 
+model CashRegister {
+  id Int @id @default(autoincrement()) @map("id_caja")
+  branchId Int @map("id_sucursal")
+  name String @map("nombre") @db.VarChar(80)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  shifts CashShift[]
+  @@unique([branchId, name])
+  @@map("cajas")
+}
+
+model CashShift {
+  // Partial unique indexes enforce one open shift per user and register.
+  id Int @id @default(autoincrement()) @map("id_turno")
+  registerId Int @map("id_caja")
+  userId Int @map("id_usuario")
+  openingKey String @map("clave_apertura") @db.Uuid
+  openedAt DateTime @default(now()) @map("fecha_apertura") @db.Timestamptz(3)
+  closedAt DateTime? @map("fecha_cierre") @db.Timestamptz(3)
+  currency String @map("moneda") @db.VarChar(3)
+  openingCash Decimal @map("saldo_inicial") @db.Decimal(14, 2)
+  cashTotal Decimal @default(0) @map("ventas_efectivo") @db.Decimal(14, 2)
+  cardTotal Decimal @default(0) @map("ventas_tarjeta") @db.Decimal(14, 2)
+  qrTotal Decimal @default(0) @map("ventas_qr") @db.Decimal(14, 2)
+  transferTotal Decimal @default(0) @map("ventas_transferencia") @db.Decimal(14, 2)
+  saleCount Int @default(0) @map("cantidad_ventas")
+  countedCash Decimal? @map("efectivo_contado") @db.Decimal(14, 2)
+  closingNote String? @map("observacion_cierre") @db.VarChar(500)
+  register CashRegister @relation(fields: [registerId], references: [id], onDelete: Restrict)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  sales Sale[]
+  offlineBatches OfflineBatch[]
+  @@unique([userId, openingKey])
+  @@index([registerId, openedAt])
+  @@index([userId, openedAt])
+  @@map("turnos_caja")
+}
+
+model OfflineBatch {
+  id String @id @db.Uuid
+  shiftId Int @map("id_turno")
+  deviceId String @map("id_dispositivo") @db.Uuid
+  preparedAt DateTime @default(now()) @map("fecha_preparacion") @db.Timestamptz(3)
+  finishedAt DateTime? @map("fecha_finalizacion") @db.Timestamptz(3)
+  snapshot Json @map("catalogo")
+  revision Int @default(0)
+  shift CashShift @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+  sales Sale[]
+  @@index([shiftId])
+  @@map("lotes_offline")
+}
+
 model Sale {
+  cashOnDelivery Boolean @default(false) @map("contra_entrega")
+  deliveryName String? @map("destinatario") @db.VarChar(120)
+  deliveryPhone String? @map("telefono_entrega") @db.VarChar(30)
+  deliveryAddress String? @map("direccion_entrega") @db.VarChar(250)
+  deliveredAt DateTime? @map("fecha_entrega") @db.Timestamptz(3)
+  offlineBatchId String? @map("id_lote_offline") @db.Uuid
+  offlineBatch OfflineBatch? @relation(fields: [offlineBatchId], references: [id], onDelete: Restrict)
+  shiftId Int? @map("id_turno")
+  shift CashShift? @relation(fields: [shiftId], references: [id], onDelete: Restrict)
   id            Int          @id @default(autoincrement()) @map("id_venta")
   clientId      Int?         @map("id_cliente")
   employeeId    Int?         @map("id_empleado")
@@ -454,6 +526,8 @@ model Sale {
   items         SaleItem[]
   payments      Payment[]
 
+  @@index([offlineBatchId])
+  @@index([shiftId])
   @@index([clientId, soldAt])
   @@index([employeeId])
   @@index([branchId, soldAt])

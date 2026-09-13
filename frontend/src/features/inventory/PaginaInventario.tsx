@@ -39,7 +39,8 @@ export default function PaginaInventario() {
           <p className="fs-eyebrow">Operaciones</p>
           <h1>Inventario</h1>
           <p className="fs-sub">
-            Existencias por producto, talla, color y sucursal. Disponible = fisico - reservado.
+            Un almacen por sucursal. Existencias por producto, talla y color. Disponible = fisico -
+            reservado.
           </p>
         </div>
         <button type="button" className="fs-btn fs-btn--acento" onClick={() => setEntrada(true)}>
@@ -78,7 +79,7 @@ export default function PaginaInventario() {
                 <option value="">Todas</option>
                 {sucursales.data?.map((s) => (
                   <option key={s.id_sucursal} value={s.id_sucursal}>
-                    {s.nombre}
+                    {s.nombre} - {s.nombre_almacen ?? 'Almacen principal'}
                   </option>
                 ))}
               </select>
@@ -139,7 +140,13 @@ export default function PaginaInventario() {
                           {i.color?.nombre}
                         </span>
                       </td>
-                      <td>{i.sucursal?.nombre}</td>
+                      <td>
+                        {i.sucursal?.nombre}
+                        <div className="fs-sub">
+                          {sucursales.data?.find((s) => s.id_sucursal === i.id_sucursal)
+                            ?.nombre_almacen ?? 'Almacen principal'}
+                        </div>
+                      </td>
                       <td className="fs-tabla-num">{i.cantidad_fisica}</td>
                       <td className="fs-tabla-num">{i.cantidad_reservada}</td>
                       <td>

@@ -8,7 +8,7 @@ export default function PaginaSucursales() {
   return (
     <CrudSimple<Sucursal>
       titulo="Sucursales"
-      descripcion="Tiendas fisicas donde se mantiene inventario y se atienden reservas."
+      descripcion="Cada sucursal dispone de un almacen para su inventario y atiende reservas."
       nombreSingular="Sucursal"
       claveCache={[...claves.sucursales, 'admin']}
       cargar={sucursalesService.listarTodas}
@@ -17,9 +17,17 @@ export default function PaginaSucursales() {
       eliminar={(id) => sucursalesService.eliminar(id)}
       idDe={(s) => s.id_sucursal}
       bajaLogica={(item) => item.activa}
-      nuevo={{ nombre: '', ciudad: '', direccion: '', telefono: '', activa: true }}
+      nuevo={{
+        nombre_almacen: 'Almacen principal',
+        nombre: '',
+        ciudad: '',
+        direccion: '',
+        telefono: '',
+        activa: true,
+      }}
       columnas={[
         { titulo: 'Nombre', render: (s) => s.nombre },
+        { titulo: 'Almacen', render: (s) => s.nombre_almacen ?? 'Almacen principal' },
         { titulo: 'Ciudad', render: (s) => s.ciudad },
         { titulo: 'Direccion', render: (s) => <span className="fs-sub">{s.direccion}</span> },
         { titulo: 'Telefono', render: (s) => s.telefono },
@@ -27,6 +35,13 @@ export default function PaginaSucursales() {
       ]}
       campos={[
         { clave: 'nombre', etiqueta: 'Nombre', requerido: true, minLength: 2, maxLength: 120 },
+        {
+          clave: 'nombre_almacen',
+          etiqueta: 'Nombre del almacen',
+          requerido: true,
+          minLength: 2,
+          maxLength: 120,
+        },
         { clave: 'ciudad', etiqueta: 'Ciudad', requerido: true, minLength: 2, maxLength: 100 },
         {
           clave: 'direccion',

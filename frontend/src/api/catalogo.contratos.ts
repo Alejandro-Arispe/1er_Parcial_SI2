@@ -37,6 +37,7 @@ export interface ProveedorBackend extends NombreBackend {
   active: boolean;
 }
 export interface SucursalBackend extends NombreBackend {
+  warehouseName?: string;
   city: string;
   address: string;
   phone: string | null;
@@ -51,6 +52,8 @@ export interface RecursoBackend {
   active: boolean;
 }
 export interface ProductoBackend extends CategoriaBackend {
+  imageUrls?: string[];
+  wholesalePrice?: number | null;
   price: number;
   currentPrice: number;
   discountPercent: number;
@@ -116,6 +119,7 @@ export const adaptarProveedor = (v: ProveedorBackend): Proveedor => ({
 });
 export const adaptarSucursal = (v: SucursalBackend): Sucursal => ({
   id_sucursal: v.id,
+  nombre_almacen: v.warehouseName ?? 'Almacen principal',
   nombre: v.name,
   ciudad: v.city,
   direccion: v.address,
@@ -133,10 +137,12 @@ export const adaptarRecurso = (v: RecursoBackend): RecursoRA => ({
 
 export function adaptarProducto(v: ProductoBackend): Producto {
   return {
-    id_producto: v.id,
+      id_producto: v.id,
     nombre: v.name,
     descripcion: v.description ?? '',
     precio: v.price,
+    precio_mayorista: v.wholesalePrice ?? null,
+    imagenes: v.imageUrls?.length ? v.imageUrls : v.imageUrl ? [v.imageUrl] : [],
     precio_actual: v.currentPrice,
     promocion_activa: v.promotionActive,
     descuento_pct: v.discountPercent,

@@ -1,5 +1,7 @@
 import { Type, Transform } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ValidateIf,
   ArrayNotEmpty,
   ArrayUnique,
   IsArray,
@@ -39,6 +41,26 @@ export class UpdateProductDto {
   @IsOptional()
   @IsUrl({ require_tld: false })
   imageUrl?: string;
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsArray()
+  @ArrayMaxSize(8)
+  @ArrayUnique()
+  @IsUrl(
+    {
+      protocols: ['http', 'https'],
+      require_protocol: true,
+      require_tld: false,
+    },
+    { each: true },
+  )
+  imageUrls?: string[];
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  wholesalePrice?: number | null;
 
   @IsOptional()
   @Type(() => Number)

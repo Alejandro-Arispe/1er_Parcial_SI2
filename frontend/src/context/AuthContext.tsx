@@ -1,3 +1,4 @@
+import { identidadOffline, borrarIdentidadOffline } from '../lib/offline-identidad';
 /**
  * Sesion del usuario. Es el unico estado verdaderamente global de la app.
  * El backend sigue siendo la autoridad de autorizacion: aqui solo resolvemos UX.
@@ -18,6 +19,7 @@ import { RolNombre, type Usuario } from '../types/domain';
 
 interface ContextoAuth {
   usuario: Usuario | null;
+  sesionOffline: boolean;
   cargando: boolean;
   errorSesion: Error | null;
   reintentarSesion: () => void;
@@ -35,6 +37,7 @@ interface ContextoAuth {
 const Contexto = createContext<ContextoAuth | null>(null);
 
 export function ProveedorAuth({ children }: { children: ReactNode }) {
+  const [sesionOffline, setSesionOffline] = useState(false);
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [cargando, setCargando] = useState(() => Boolean(obtenerToken()));
   const [errorSesion, setErrorSesion] = useState<Error | null>(null);
@@ -47,6 +50,7 @@ export function ProveedorAuth({ children }: { children: ReactNode }) {
         void queryClient.cancelQueries();
         queryClient.clear();
         setUsuario(null);
+        setSesionOffline(false);
         setErrorSesion(null);
         setCargando(externa && Boolean(obtenerToken()));
         if (externa && obtenerToken()) setIntento((actual) => actual + 1);
@@ -60,10 +64,23 @@ export function ProveedorAuth({ children }: { children: ReactNode }) {
     if (!obtenerToken()) return;
     const revision = revisionSesion();
     const vigente = () => activo && revision === revisionSesion();
-    authService
-      .perfil()
-      .then((u) => vigente() && setUsuario(u))
+    const cached = identidadOffline();
+    const desdeCache = !navigator.onLine && Boolean(cached);
+    const perfil = desdeCache ? Promise.resolve(cached!) : authService.perfil();
+    perfil
+      .then((u) => {
+        if (vigente()) {
+          setUsuario(u);
+          setSesionOffline(desdeCache);
+        }
+      })
       .catch((error: unknown) => {
+        const status = (error as { status?: number })?.status;
+        if (vigente() && cached && (status === 0 || (status != null && status >= 500))) {
+          setUsuario(cached);
+          setSesionOffline(true);
+          return;
+        }
         if (vigente())
           setErrorSesion(
             error instanceof Error ? error : new Error('No pudimos recuperar la sesion.'),
@@ -75,6 +92,14 @@ export function ProveedorAuth({ children }: { children: ReactNode }) {
     };
   }, [intento]);
 
+  useEffect(() => {
+    const conectar = () => {
+      if (sesionOffline && obtenerToken()) setIntento((n) => n + 1);
+    };
+    window.addEventListener('online', conectar);
+    return () => window.removeEventListener('online', conectar);
+  }, [sesionOffline]);
+
   const reintentarSesion = useCallback(() => {
     setErrorSesion(null);
     setCargando(Boolean(obtenerToken()));
@@ -84,6 +109,7 @@ export function ProveedorAuth({ children }: { children: ReactNode }) {
   const iniciarSesion = useCallback(async (credenciales: CredencialesLogin) => {
     const u = await authService.login(credenciales);
     setUsuario(u);
+    setSesionOffline(false);
     setErrorSesion(null);
     setCargando(false);
     return u;
@@ -92,12 +118,15 @@ export function ProveedorAuth({ children }: { children: ReactNode }) {
   const registrarse = useCallback(async (datos: DatosRegistro) => {
     const u = await authService.registrar(datos);
     setUsuario(u);
+    setSesionOffline(false);
     setErrorSesion(null);
     setCargando(false);
     return u;
   }, []);
 
   const cerrarSesion = useCallback(async () => {
+    borrarIdentidadOffline();
+    setSesionOffline(false);
     await authService.logout();
     setUsuario(null);
     queryClient.clear();
@@ -107,6 +136,7 @@ export function ProveedorAuth({ children }: { children: ReactNode }) {
     const roles = usuario?.roles.map((r) => String(r.nombre)) ?? [];
     return {
       usuario,
+      sesionOffline,
       cargando,
       errorSesion,
       reintentarSesion,
@@ -120,7 +150,16 @@ export function ProveedorAuth({ children }: { children: ReactNode }) {
       registrarse,
       cerrarSesion,
     };
-  }, [usuario, cargando, errorSesion, reintentarSesion, iniciarSesion, registrarse, cerrarSesion]);
+  }, [
+    usuario,
+    sesionOffline,
+    cargando,
+    errorSesion,
+    reintentarSesion,
+    iniciarSesion,
+    registrarse,
+    cerrarSesion,
+  ]);
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;
 }

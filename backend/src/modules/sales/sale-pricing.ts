@@ -44,8 +44,9 @@ export function priceLine(
   sizeName: string,
   colorName: string,
   now: Date,
+  wholesale = false,
 ) {
-  const pricing = productPrice(product, now);
+  const pricing = productPrice(product, now, wholesale);
   return {
     productId: item.productId,
     sizeId: item.sizeId,

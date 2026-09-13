@@ -160,6 +160,10 @@ export function useVentas(filtros: FiltrosVenta = {}, habilitado = true) {
   });
 }
 
+export function useMisCompras(filtros: FiltrosVenta = {}) {
+  return useQuery({ queryKey: ['ventas', 'propias', filtros], queryFn: () => ventasService.propias(filtros) });
+}
+
 export function useVenta(id: number | undefined) {
   return useQuery({
     queryKey: claves.venta(id ?? 0),

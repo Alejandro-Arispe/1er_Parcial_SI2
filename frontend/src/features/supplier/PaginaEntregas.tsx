@@ -1,4 +1,5 @@
 import { USAR_MOCKS } from '../../api/config';
+import EntregasProveedorReal from './EntregasProveedorReal';
 import { ErrorEstado, FilasSkeleton, Vacio } from '../../components/ui/Estados';
 import { useAuth } from '../../context/AuthContext';
 import { useMovimientos, useProductosDeProveedor } from '../../hooks/useOperaciones';
@@ -13,10 +14,7 @@ export default function PaginaEntregas() {
   return USAR_MOCKS ? (
     <EntregasDemo />
   ) : (
-    <Vacio
-      titulo="Entregas del proveedor"
-      mensaje="La consulta de entregas para proveedores aun no esta habilitada."
-    />
+    <EntregasProveedorReal />
   );
 }
 

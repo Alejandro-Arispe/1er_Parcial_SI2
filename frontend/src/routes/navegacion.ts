@@ -36,6 +36,9 @@ const ADMIN: GrupoNav[] = [
       { a: '/admin/inventario', texto: 'Inventario' },
       { a: '/admin/reservas', texto: 'Reservas' },
       { a: '/admin/ventas', texto: 'Ventas' },
+      { a: '/caja', texto: 'Punto de venta', exacto: true },
+      { a: '/caja/turnos', texto: 'Turnos y arqueos' },
+      { a: '/caja/offline', texto: 'Ventas offline' },
     ],
   },
   {
@@ -57,6 +60,9 @@ const SUCURSAL: GrupoNav[] = [
       { a: '/sucursal/inventario', texto: 'Inventario' },
       { a: '/sucursal/movimientos', texto: 'Movimientos' },
       { a: '/sucursal/ventas', texto: 'Ventas' },
+      { a: '/caja', texto: 'Punto de venta', exacto: true },
+      { a: '/caja/turnos', texto: 'Turnos y arqueos' },
+      { a: '/caja/offline', texto: 'Ventas offline' },
     ],
   },
 ];
@@ -66,7 +72,9 @@ const CAJA: GrupoNav[] = [
     titulo: 'Caja',
     enlaces: [
       { a: '/caja', texto: 'Punto de venta', exacto: true },
-      { a: '/caja/ventas', texto: 'Ventas del dia' },
+      { a: '/caja/turnos', texto: 'Turnos y arqueos' },
+      { a: '/caja/offline', texto: 'Ventas offline' },
+      { a: '/caja/ventas', texto: 'Historial de ventas' },
     ],
   },
 ];

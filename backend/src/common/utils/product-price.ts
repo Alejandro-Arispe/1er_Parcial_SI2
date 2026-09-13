@@ -1,6 +1,7 @@
 import { Prisma } from '../../generated/prisma/client.js';
 
 export interface ProductPricing {
+  wholesalePrice?: { toString(): string } | null;
   price: { toString(): string };
   discountPercent: { toString(): string };
   promotionStart: Date | null;
@@ -8,7 +9,20 @@ export interface ProductPricing {
 }
 
 // Shared by catalog and cart; stored prices and totals use decimal arithmetic.
-export function productPrice(product: ProductPricing, now = new Date()) {
+export function productPrice(
+  product: ProductPricing,
+  now = new Date(),
+  wholesale = false,
+) {
+  if (wholesale && product.wholesalePrice != null) {
+    const price = new Prisma.Decimal(product.wholesalePrice.toString());
+    return {
+      price,
+      currentPrice: price,
+      discountPercent: new Prisma.Decimal(0),
+      promotionActive: false,
+    };
+  }
   const price = new Prisma.Decimal(product.price.toString());
   const discountPercent = new Prisma.Decimal(
     product.discountPercent.toString(),

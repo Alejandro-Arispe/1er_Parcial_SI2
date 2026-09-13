@@ -9,7 +9,15 @@ import {
   Post,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ProductImagesService,
+  MAX_IMAGE_BYTES,
+} from './product-images.service.js';
+import type { UploadedImage } from './product-images.service.js';
 import { Roles } from '../../../common/decorators/roles.decorator.js';
 import { Role } from '../../../common/enums/role.enum.js';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard.js';
@@ -21,7 +29,22 @@ import { ProductsService } from './products.service.js';
 
 @Controller('products')
 export class ProductsController {
-  constructor(private readonly productsService: ProductsService) {}
+  constructor(
+    private readonly productsService: ProductsService,
+    private readonly images: ProductImagesService,
+  ) {}
+
+  @Post('images/upload')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMINISTRATOR)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_IMAGE_BYTES, files: 1, fields: 0 },
+    }),
+  )
+  uploadImage(@UploadedFile() file: UploadedImage) {
+    return this.images.upload(file);
+  }
 
   @Get()
   findAll(@Query() query: ListProductsQueryDto) {

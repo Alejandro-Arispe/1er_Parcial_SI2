@@ -11,13 +11,14 @@ export const ROLES_BACKEND = {
 export type RolBackend = keyof typeof ROLES_BACKEND;
 
 export interface UsuarioBackend {
+  supplier?: { id: number; name: string; active: boolean } | null;
   id: number;
   name: string;
   email: string;
   active: boolean;
   registeredAt: string;
   roles: Array<{ role: { id: number; name: RolBackend; description: string | null } }>;
-  client: { id: number; phone: string | null; address: string | null } | null;
+  client: { wholesale?: boolean; id: number; phone: string | null; address: string | null } | null;
   employee: {
     id: number;
     jobTitle: string;
@@ -57,6 +58,9 @@ export function adaptarUsuario(user: UsuarioBackend): Usuario {
     email: user.email,
     activo: user.active,
     fecha_registro: user.registeredAt,
+    id_proveedor: user.supplier?.id,
+    proveedor_nombre: user.supplier?.name,
+    proveedor_activo: user.supplier?.active,
     roles: user.roles.map(({ role }) => ({
       id_rol: role.id,
       nombre: ROLES_BACKEND[role.name] ?? role.name,
@@ -65,6 +69,7 @@ export function adaptarUsuario(user: UsuarioBackend): Usuario {
     ...(user.client
       ? {
           id_cliente: user.client.id,
+          mayorista: user.client.wholesale ?? false,
           telefono: user.client.phone ?? '',
           direccion: user.client.address ?? '',
         }

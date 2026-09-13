@@ -33,6 +33,12 @@ const MENSAJES: Record<number, string> = {
 };
 
 const TRADUCCIONES: Record<string, string> = {
+  'Stripe is not configured': 'Stripe todavia no esta configurado en el servidor.',
+  'Stripe is unavailable; retry the same operation': 'Stripe no responde. Reintenta el mismo pago para consultar su resultado.',
+  'Cart or prices changed; request a new checkout preview': 'El carrito o los precios cambiaron. Revisa la nueva cotizacion antes de confirmar.',
+  'Sale is no longer awaiting payment': 'El pedido ya no esta pendiente de pago. Actualiza su estado.',
+  'Only unpaid digital sales can be cancelled; paid sales require a refund': 'Solo se pueden cancelar pedidos digitales pendientes de pago.',
+  'File too large': 'Cada foto debe pesar como maximo 5 MB.',
   'approximateTime must be in the future': 'La visita debe tener una fecha y hora futura.',
   'The reservation is already closed': 'La reserva ya esta cerrada. Actualiza la lista.',
   'The branch must close the reservation once the customer is present':
@@ -88,7 +94,7 @@ function normalizarError(error: unknown): ErrorApi {
     const mensajes = (Array.isArray(detalle) ? detalle : detalle ? [detalle] : []).map(
       (mensaje) =>
         TRADUCCIONES[mensaje] ??
-        (mensaje.startsWith('Insufficient stock or invalid variant:')
+        (mensaje.startsWith('Insufficient stock or invalid variant:') || mensaje.startsWith('Insufficient stock:') || mensaje.startsWith('Unavailable product/variant in branch:')
           ? 'Una prenda ya no esta disponible en la sucursal o no tiene suficientes unidades. Revisa la seleccion.'
           : mensaje.startsWith('Invalid transition from ')
             ? 'La reserva cambio de estado. Actualiza la lista antes de continuar.'
@@ -148,6 +154,11 @@ async function peticion<T>(
 }
 
 export const api = {
+  upload: <T>(url: string, datos: FormData) =>
+    peticion<T>('POST', url, datos, {
+      headers: { 'Content-Type': undefined },
+      timeout: 45000,
+    }),
   get: <T>(url: string, params?: object) => peticion<T>('GET', url, undefined, { params }),
   post: <T>(url: string, datos?: unknown) => peticion<T>('POST', url, datos),
   put: <T>(url: string, datos?: unknown) => peticion<T>('PUT', url, datos),

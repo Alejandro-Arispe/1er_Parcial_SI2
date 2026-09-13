@@ -14,6 +14,7 @@ describe('SalesService', () => {
   };
   const item = { productId: 1, sizeId: 1, colorId: 1, quantity: 2 };
   const dto: CreateInStoreSaleDto = {
+    shiftId: 1,
     branchId: 1,
     items: [item],
     expectedTotal: 20,
@@ -22,8 +23,12 @@ describe('SalesService', () => {
   };
   const repository = {
     transaction: vi.fn(),
+    recordShiftSale: vi.fn(),
+    requireOnlineShift: vi.fn(),
     findEmployee: vi.fn(),
     findClient: vi.fn(),
+    findClientById: vi.fn(),
+    findCart: vi.fn(),
     findBranch: vi.fn(),
     findRequest: vi.fn(),
     findStock: vi.fn(),
@@ -122,6 +127,44 @@ describe('SalesService', () => {
       0,
       expect.anything(),
     );
+  });
+
+  it('prices an in-store sale using the selected customer tier', async () => {
+    repository.findClientById.mockResolvedValue({ id: 3, wholesale: true });
+    const stock = await repository.findStock();
+    stock.product.wholesalePrice = new Prisma.Decimal(8);
+    await service.createInStore(
+      { ...dto, clientId: 3, expectedTotal: 16 },
+      cashier,
+    );
+    expect(repository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ total: new Prisma.Decimal(16) }),
+      expect.anything(),
+    );
+  });
+
+  it('changes the checkout quote when a customer changes tier', async () => {
+    const stock = await repository.findStock();
+    stock.product.wholesalePrice = new Prisma.Decimal(8);
+    const cart = {
+      id: 4,
+      updatedAt: new Date(),
+      items: [item],
+      client: { wholesale: true },
+    };
+    repository.findCart.mockResolvedValue(cart);
+    const wholesale = await service.previewCheckout(
+      { cartId: 4, branchId: 1 },
+      customer,
+    );
+    cart.client.wholesale = false;
+    const retail = await service.previewCheckout(
+      { cartId: 4, branchId: 1 },
+      customer,
+    );
+    expect(wholesale.total).toBe(16);
+    expect(retail.total).toBe(20);
+    expect(wholesale.quoteHash).not.toBe(retail.quoteHash);
   });
 
   it('rejects customer cash sales, wrong branches and mismatched totals', async () => {

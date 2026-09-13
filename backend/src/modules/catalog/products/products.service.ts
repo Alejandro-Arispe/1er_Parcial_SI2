@@ -15,6 +15,7 @@ export class ProductsService {
   constructor(private readonly productsRepository: ProductsRepository) {}
 
   async create(dto: CreateProductDto) {
+    this.validateWholesale(dto.price, dto.wholesalePrice);
     this.validatePromotion(dto.promotionStart, dto.promotionEnd);
     await this.validateDependencies(
       dto.categoryId,
@@ -86,6 +87,12 @@ export class ProductsService {
         ? current.promotionEnd?.toISOString()
         : dto.promotionEnd;
     this.validatePromotion(promotionStart, promotionEnd);
+    this.validateWholesale(
+      dto.price ?? Number(current.price),
+      dto.wholesalePrice === undefined
+        ? current.wholesalePrice
+        : dto.wholesalePrice,
+    );
 
     const categoryId = dto.categoryId ?? current.categoryId;
     const seasonId = dto.seasonId ?? current.seasonId;
@@ -128,7 +135,12 @@ export class ProductsService {
 
     const product = await this.productsRepository.update(
       id,
-      this.toWriteData(dto),
+      {
+        ...this.toWriteData(dto),
+        ...(supplierId !== current.supplierId
+          ? { supplierAvailability: null }
+          : {}),
+      },
       dto.sizeIds,
       dto.colorIds,
     );
@@ -201,6 +213,20 @@ export class ProductsService {
     }
   }
 
+  private validateWholesale(
+    price: number,
+    wholesalePrice?: { toString(): string } | number | null,
+  ) {
+    if (
+      wholesalePrice != null &&
+      (Number(wholesalePrice) <= 0 || Number(wholesalePrice) > price)
+    ) {
+      throw new BadRequestException(
+        'El precio mayorista debe ser mayor a cero y no superar el precio minorista',
+      );
+    }
+  }
+
   private toWriteData(
     dto: CreateProductDto,
   ): ProductWriteData &
@@ -224,7 +250,10 @@ export class ProductsService {
       name: dto.name,
       description: dto.description,
       price: dto.price,
-      imageUrl: dto.imageUrl,
+      wholesalePrice: dto.wholesalePrice,
+      imageUrls: dto.imageUrls ?? (dto.imageUrl ? [dto.imageUrl] : undefined),
+      imageUrl:
+        dto.imageUrls !== undefined ? (dto.imageUrls[0] ?? null) : dto.imageUrl,
       discountPercent: dto.discountPercent,
       promotionStart:
         dto.promotionStart == null
@@ -245,6 +274,9 @@ export class ProductsService {
   private present<
     T extends {
       price: { toString(): string };
+      wholesalePrice?: { toString(): string } | null;
+      imageUrl?: string | null;
+      imageUrls?: string[];
       discountPercent: { toString(): string };
       promotionStart: Date | null;
       promotionEnd: Date | null;
@@ -256,7 +288,14 @@ export class ProductsService {
 
     return {
       ...product,
+      imageUrls: product.imageUrls?.length
+        ? product.imageUrls
+        : product.imageUrl
+          ? [product.imageUrl]
+          : [],
       price: pricing.price.toNumber(),
+      wholesalePrice:
+        product.wholesalePrice == null ? null : Number(product.wholesalePrice),
       discountPercent: pricing.discountPercent.toNumber(),
       currentPrice: pricing.currentPrice.toNumber(),
       promotionActive: pricing.promotionActive,

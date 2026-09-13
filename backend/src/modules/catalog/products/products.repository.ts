@@ -8,6 +8,8 @@ const productSelect = {
   name: true,
   description: true,
   price: true,
+  wholesalePrice: true,
+  imageUrls: true,
   imageUrl: true,
   discountPercent: true,
   promotionStart: true,
@@ -29,10 +31,13 @@ const productSelect = {
 } satisfies Prisma.ProductSelect;
 
 export interface ProductWriteData {
+  supplierAvailability?: string | null;
   name?: string;
   description?: string;
   price?: number;
-  imageUrl?: string;
+  wholesalePrice?: number | null;
+  imageUrls?: string[];
+  imageUrl?: string | null;
   discountPercent?: number;
   promotionStart?: Date | null;
   promotionEnd?: Date | null;

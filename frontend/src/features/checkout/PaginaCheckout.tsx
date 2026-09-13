@@ -1,4 +1,5 @@
 import { USAR_MOCKS } from '../../api/config';
+import CheckoutReal from './CheckoutReal';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Confirmacion } from '../../components/ui/Modal';
@@ -33,13 +34,7 @@ export default function PaginaCheckout() {
   return USAR_MOCKS ? (
     <CheckoutDemo />
   ) : (
-    <div className="fs-contenedor fs-seccion">
-      <h1>Pago en linea proximamente</h1>
-      <p>Puedes seguir preparando tu carrito mientras habilitamos el pago en linea.</p>
-      <Link className="fs-btn fs-btn--acento" to="/carrito">
-        Volver al carrito
-      </Link>
-    </div>
+    <CheckoutReal />
   );
 }
 

@@ -9,6 +9,7 @@ const cartProductSelect = {
   imageUrl: true,
   active: true,
   price: true,
+  wholesalePrice: true,
   discountPercent: true,
   promotionStart: true,
   promotionEnd: true,
@@ -17,6 +18,7 @@ const cartProductSelect = {
 } satisfies Prisma.ProductSelect;
 
 const cartInclude = {
+  client: { select: { wholesale: true } },
   items: {
     include: {
       product: { select: cartProductSelect },

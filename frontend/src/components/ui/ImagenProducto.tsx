@@ -17,15 +17,15 @@ interface Props {
 }
 
 export function ImagenProducto({ src, alt, prioritaria }: Props) {
-  const [fuente, setFuente] = useState(src || RESPALDO);
+  const [fallida, setFallida] = useState<string | null>(null);
 
   return (
     <img
-      src={fuente}
+      src={!src || fallida === src ? RESPALDO : src}
       alt={alt}
       loading={prioritaria ? 'eager' : 'lazy'}
       decoding="async"
-      onError={() => setFuente(RESPALDO)}
+      onError={() => setFallida(src)}
     />
   );
 }

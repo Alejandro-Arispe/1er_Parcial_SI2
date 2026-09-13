@@ -1,3 +1,4 @@
+import { CashModule } from './modules/cash/cash.module.js';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller.js';
@@ -38,6 +39,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     ReservationsModule,
     CartModule,
     SalesModule,
+    CashModule,
     PaymentsModule,
     ReportsModule,
     NotificationsModule,

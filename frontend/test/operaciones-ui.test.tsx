@@ -197,7 +197,7 @@ describe('pantallas de inventario y carrito', () => {
       'No hay una sucursal que pueda atender todo el carrito',
     );
     expect(document.body.textContent).toContain('Reduce la cantidad');
-    expect(boton('Pago en linea proximamente').disabled).toBe(true);
+    expect(boton('Continuar con la compra').disabled).toBe(true);
   });
   it('limita cantidades por tienda sin sumar stock repartido entre sucursales', async () => {
     qc.setQueryData(['producto', 1], adaptarProducto(prenda));
@@ -216,11 +216,11 @@ describe('pantallas de inventario y carrito', () => {
     expect(boton('+').disabled).toBe(true);
     expect(boton('Agregar al carrito').disabled).toBe(false);
   });
-  it('la ruta de pago real no llama al servicio de ventas de la demo', async () => {
+  it('el checkout requiere una sesion antes de consultar o crear pedidos', async () => {
     const adapter = vi.fn();
     instancia.defaults.adapter = adapter;
     await montar(<PaginaCheckout />);
-    expect(document.body.textContent).toContain('Pago en linea proximamente');
+    expect(document.body.textContent).not.toContain('Confirmar compra');
     expect(adapter).not.toHaveBeenCalled();
   });
 });

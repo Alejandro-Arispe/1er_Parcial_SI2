@@ -12,6 +12,7 @@ import {
   useRoles,
   useSucursales,
   useUsuarios,
+  useProveedores,
 } from '../../hooks/useOperaciones';
 import {
   email as validarEmail,
@@ -26,6 +27,7 @@ import { RolNombre, type Usuario } from '../../types/domain';
 
 const VACIO: DatosUsuario = {
   nombre: '',
+  mayorista: false,
   email: '',
   password: '',
   activo: true,
@@ -34,6 +36,7 @@ const VACIO: DatosUsuario = {
   direccion: '',
   cargo: '',
   id_sucursal: null,
+  id_proveedor: null,
 };
 
 export default function PaginaUsuarios() {
@@ -48,6 +51,7 @@ export default function PaginaUsuarios() {
   const [porDesactivar, setPorDesactivar] = useState<Usuario | null>(null);
 
   const roles = useRoles();
+  const proveedores = useProveedores();
   const sucursales = useSucursales();
   const guardar = useGuardarUsuario();
   const desactivar = useDesactivarUsuario();
@@ -70,6 +74,7 @@ export default function PaginaUsuarios() {
     const u = editando as Usuario & Record<string, unknown>;
     setDatos({
       nombre: u.nombre,
+      mayorista: u.mayorista ?? false,
       email: u.email,
       password: '',
       activo: u.activo,
@@ -78,10 +83,12 @@ export default function PaginaUsuarios() {
       direccion: (u.direccion as string) ?? '',
       cargo: (u.cargo as string) ?? '',
       id_sucursal: (u.id_sucursal as number | null) ?? null,
+      id_proveedor: u.id_proveedor ?? null,
     });
   }, [editando]);
 
   const seleccionados = roles.data?.filter((r) => datos.id_roles.includes(r.id_rol)) ?? [];
+  const esProveedor = seleccionados.some(r => r.nombre === RolNombre.PROVEEDOR) || Boolean(editando?.id_proveedor);
   const esCliente = editando
     ? Boolean(editando.id_cliente)
     : seleccionados.some((r) => r.nombre === RolNombre.CLIENTE);
@@ -219,7 +226,10 @@ export default function PaginaUsuarios() {
                 <tbody>
                   {consulta.data.items.map((u) => (
                     <tr key={u.id_usuario}>
-                      <td>{u.nombre}</td>
+                      <td>
+                        {u.nombre}
+                        {u.mayorista && <span className="fs-badge">Mayorista</span>}
+                      </td>
                       <td className="fs-sub">{u.email}</td>
                       <td>
                         <div className="fs-fila-wrap" style={{ gap: 6 }}>
@@ -370,6 +380,27 @@ export default function PaginaUsuarios() {
             {errores.id_roles && <span className="fs-campo-error">{errores.id_roles}</span>}
           </div>
 
+          {esProveedor && <div className="fs-campo">
+            <label htmlFor="proveedor-usuario">Proveedor asociado</label>
+            <select id="proveedor-usuario" className="fs-select" value={datos.id_proveedor ?? ''}
+              onChange={e => setDatos({ ...datos, id_proveedor: e.target.value ? Number(e.target.value) : null })}>
+              <option value="">Sin proveedor asociado</option>
+              {proveedores.data?.filter(p => p.activo || p.id_proveedor === datos.id_proveedor).map(p =>
+                <option key={p.id_proveedor} value={p.id_proveedor} disabled={!p.activo}>{p.nombre}{p.activo ? '' : ' (inactivo)'}</option>)}
+            </select>
+            <span className="fs-campo-ayuda">Asigna el proveedor cuyos productos puede gestionar. Sin asociacion activa no tendra acceso al panel.</span>
+            {proveedores.isError && <ErrorEstado error={proveedores.error} onReintentar={() => proveedores.refetch()} />}
+          </div>}
+          {esCliente && (
+            <label className="fs-check">
+              <input
+                type="checkbox"
+                checked={datos.mayorista ?? false}
+                onChange={(e) => setDatos({ ...datos, mayorista: e.target.checked })}
+              />
+              Cliente mayorista
+            </label>
+          )}
           {esCliente && (
             <div className="fs-rejilla-form">
               <div className="fs-campo">

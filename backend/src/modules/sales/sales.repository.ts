@@ -58,17 +58,102 @@ export class SalesRepository {
     }
   }
 
+  async requireOnlineShift(shiftId: number, tx: Prisma.TransactionClient) {
+    if (
+      await tx.offlineBatch.findFirst({ where: { shiftId, finishedAt: null } })
+    )
+      throw new ConflictException(
+        'Finaliza y sincroniza el modo offline antes de usar la caja normal.',
+      );
+  }
+
+  async recordShiftSale(
+    shiftId: number,
+    userId: number,
+    branchId: number,
+    currency: string,
+    method: 'CASH' | 'CARD' | 'QR' | 'BANK_TRANSFER',
+    total: Prisma.Decimal,
+    tx: Prisma.TransactionClient,
+  ) {
+    const field = {
+      CASH: 'cashTotal',
+      CARD: 'cardTotal',
+      QR: 'qrTotal',
+      BANK_TRANSFER: 'transferTotal',
+    }[method];
+    const updated = await tx.cashShift.updateMany({
+      where: {
+        id: shiftId,
+        userId,
+        closedAt: null,
+        currency,
+        register: { branchId },
+      },
+      data: { saleCount: { increment: 1 }, [field]: { increment: total } },
+    });
+    if (updated.count !== 1)
+      throw new ConflictException(
+        'Abre un turno propio en esta sucursal antes de cobrar. El turno indicado no esta abierto o su moneda cambio.',
+      );
+  }
+
   findClient(userId: number, tx: Prisma.TransactionClient) {
     return tx.client.findFirst({
       where: { userId, user: { active: true } },
-      select: { id: true },
+      select: { id: true, wholesale: true },
+    });
+  }
+
+  searchPosCustomers(search: string, tx: Prisma.TransactionClient) {
+    return tx.client.findMany({
+      where: {
+        user: {
+          active: true,
+          OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            { email: { contains: search, mode: 'insensitive' } },
+          ],
+        },
+      },
+      select: {
+        id: true,
+        wholesale: true,
+        user: { select: { name: true, email: true } },
+      },
+      orderBy: { id: 'asc' },
+      take: 20,
+    });
+  }
+
+  findPosReservation(id: number, tx: Prisma.TransactionClient) {
+    return tx.reservation.findUnique({
+      where: { id },
+      include: {
+        sale: { select: { id: true } },
+        client: {
+          select: {
+            id: true,
+            wholesale: true,
+            user: { select: { name: true, email: true, active: true } },
+          },
+        },
+        items: {
+          include: {
+            product: { select: { name: true } },
+            size: true,
+            color: true,
+          },
+          orderBy: { id: 'asc' },
+        },
+      },
     });
   }
 
   findClientById(id: number, tx: Prisma.TransactionClient) {
     return tx.client.findFirst({
       where: { id, user: { active: true } },
-      select: { id: true },
+      select: { id: true, wholesale: true },
     });
   }
 
@@ -86,7 +171,7 @@ export class SalesRepository {
   findCart(id: number, clientId: number, tx: Prisma.TransactionClient) {
     return tx.cart.findFirst({
       where: { id, clientId, status: 'ACTIVE' },
-      include: { items: true },
+      include: { items: true, client: { select: { wholesale: true } } },
     });
   }
 

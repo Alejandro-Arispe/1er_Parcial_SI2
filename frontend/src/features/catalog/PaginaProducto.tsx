@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BadgeStock } from '../../components/ui/Badges';
 import { Cargando, ErrorEstado } from '../../components/ui/Estados';
-import { ImagenProducto } from '../../components/ui/ImagenProducto';
+import { GaleriaProducto } from './GaleriaProducto';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { useProducto } from '../../hooks/useCatalogo';
@@ -18,7 +18,7 @@ export default function PaginaProducto() {
   const idProducto = Number(id);
   const navegar = useNavigate();
   const toast = useToast();
-  const { autenticado, esCliente } = useAuth();
+  const { autenticado, esCliente, usuario } = useAuth();
 
   const consulta = useProducto(idProducto);
   const recomendaciones = useRecomendaciones({ limite: 4 });
@@ -52,8 +52,9 @@ export default function PaginaProducto() {
         <Link to="/catalogo">Volver al catalogo</Link>
       </div>
     );
-  const enPromo = promocionVigente(producto);
-  const precio = precioActual(producto);
+  const mayorista = Boolean(usuario?.mayorista && producto.precio_mayorista != null);
+  const enPromo = !mayorista && promocionVigente(producto);
+  const precio = mayorista ? producto.precio_mayorista! : precioActual(producto);
   const seleccionCompleta = Boolean(
     idTalla &&
     idColor &&
@@ -113,9 +114,11 @@ export default function PaginaProducto() {
       </nav>
 
       <div className="fs-detalle">
-        <div className="fs-detalle__imagen">
-          <ImagenProducto src={producto.imagen_url} alt={producto.nombre} prioritaria />
-        </div>
+        <GaleriaProducto
+          key={producto.id_producto}
+          fotos={producto.imagenes ?? (producto.imagen_url ? [producto.imagen_url] : [])}
+          nombre={producto.nombre}
+        />
 
         <div className="fs-pila" style={{ gap: 20 }}>
           <div className="fs-pila" style={{ gap: 8 }}>
@@ -123,6 +126,7 @@ export default function PaginaProducto() {
             <h1>{producto.nombre}</h1>
             <div className="fs-fila" style={{ gap: 12 }}>
               <strong style={{ fontSize: '1.5rem' }}>{moneda(precio)}</strong>
+              {mayorista && <span className="fs-badge">Precio mayorista</span>}
               {enPromo && (
                 <>
                   <s className="fs-sub">{moneda(producto.precio)}</s>

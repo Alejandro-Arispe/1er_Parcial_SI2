@@ -10,8 +10,16 @@ import { ConfigService } from '@nestjs/config';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator.js';
 import { Role } from '../../common/enums/role.enum.js';
 import { Prisma } from '../../generated/prisma/client.js';
+import {
+  InStoreSelectionDto,
+  SearchPosCustomersDto,
+} from './dto/in-store-selection.dto.js';
 import { CreateInStoreSaleDto } from './dto/create-in-store-sale.dto.js';
-import { CheckoutDto, CheckoutPreviewDto } from './dto/checkout.dto.js';
+import {
+  CheckoutDto,
+  CheckoutPreviewDto,
+  DeliverSaleDto,
+} from './dto/checkout.dto.js';
 import { ListSalesQueryDto } from './dto/list-sales-query.dto.js';
 import { SaleItemDto } from './dto/sale-item.dto.js';
 import {
@@ -48,6 +56,7 @@ export class SalesService {
       : undefined;
     const requestHash = fingerprint({
       type: 'IN_STORE',
+      shiftId: dto.shiftId,
       branchId: dto.branchId,
       clientId: dto.clientId ?? null,
       reservationId: dto.reservationId ?? null,
@@ -70,58 +79,25 @@ export class SalesService {
         tx,
       );
       if (replay) return replay;
-      await this.activeBranch(dto.branchId, tx);
-      const reservation = dto.reservationId
-        ? await this.repository.findReservation(dto.reservationId, tx)
-        : null;
-      if (dto.reservationId && !reservation)
-        throw new NotFoundException('Reservation was not found');
-      if (
-        reservation &&
-        (reservation.branchId !== dto.branchId ||
-          reservation.status !== 'CUSTOMER_PRESENT' ||
-          reservation.sale)
-      ) {
-        throw new ConflictException(
-          'Reservation must be in this branch, with the customer present, and without a previous sale',
-        );
-      }
-      if (reservation && dto.clientId && dto.clientId !== reservation.clientId)
-        throw new BadRequestException('Client does not match the reservation');
-      const clientId = reservation?.clientId ?? dto.clientId;
-      if (clientId && !(await this.repository.findClientById(clientId, tx)))
-        throw new BadRequestException('Client does not exist or is inactive');
-      if (reservation) {
-        for (const item of items) {
-          const held = reservation.items.find(
-            (entry) => variantKey(entry) === variantKey(item),
-          );
-          if (
-            !held ||
-            !['PENDING', 'PREPARED'].includes(held.status) ||
-            item.quantity > held.quantity
-          ) {
-            throw new ConflictException(
-              'Purchased quantities must belong to the reservation and not exceed its held quantities',
-            );
-          }
-        }
-      }
-      const now = new Date();
-      const lines = await this.quoteItems(
-        items,
-        dto.branchId,
-        tx,
-        Boolean(reservation),
-        now,
-      );
-      const total = saleTotal(lines);
+      await this.repository.requireOnlineShift(dto.shiftId, tx);
+      const { reservation, clientId, now, lines, total } =
+        await this.inStoreQuote(dto, tx);
       if (!total.equals(dto.expectedTotal))
         throw new ConflictException(
           'Prices changed; review the current total before recording the payment',
         );
+      await this.repository.recordShiftSale(
+        dto.shiftId,
+        user.id,
+        dto.branchId,
+        this.currency(),
+        dto.paymentMethod,
+        total,
+        tx,
+      );
       const created = await this.repository.create(
         {
+          shiftId: dto.shiftId,
           clientId,
           employeeId,
           branchId: dto.branchId,
@@ -204,6 +180,142 @@ export class SalesService {
     return this.present(sale);
   }
 
+  private async inStoreQuote(
+    dto: InStoreSelectionDto,
+    tx: Prisma.TransactionClient,
+  ) {
+    const items = sortedItems(dto.items);
+    await this.activeBranch(dto.branchId, tx);
+    const reservation = dto.reservationId
+      ? await this.repository.findReservation(dto.reservationId, tx)
+      : null;
+    if (dto.reservationId && !reservation)
+      throw new NotFoundException('Reservation was not found');
+    if (
+      reservation &&
+      (reservation.branchId !== dto.branchId ||
+        reservation.status !== 'CUSTOMER_PRESENT' ||
+        reservation.sale)
+    ) {
+      throw new ConflictException(
+        'Reservation must be in this branch, with the customer present, and without a previous sale',
+      );
+    }
+    if (reservation && dto.clientId && dto.clientId !== reservation.clientId)
+      throw new BadRequestException('Client does not match the reservation');
+    const clientId = reservation?.clientId ?? dto.clientId;
+    const client = clientId
+      ? await this.repository.findClientById(clientId, tx)
+      : null;
+    if (clientId && !client)
+      throw new BadRequestException('Client does not exist or is inactive');
+    if (reservation) {
+      for (const item of items) {
+        const held = reservation.items.find(
+          (entry) => variantKey(entry) === variantKey(item),
+        );
+        if (
+          !held ||
+          !['PENDING', 'PREPARED'].includes(held.status) ||
+          item.quantity > held.quantity
+        ) {
+          throw new ConflictException(
+            'Purchased quantities must belong to the reservation and not exceed its held quantities',
+          );
+        }
+      }
+    }
+    const now = new Date();
+    const lines = await this.quoteItems(
+      items,
+      dto.branchId,
+      tx,
+      Boolean(reservation),
+      now,
+      client?.wholesale,
+    );
+    const total = saleTotal(lines);
+    return {
+      reservation,
+      clientId,
+      now,
+      lines,
+      total,
+      wholesale: client?.wholesale ?? false,
+    };
+  }
+
+  async previewInStore(dto: InStoreSelectionDto, user: AuthenticatedUser) {
+    return this.repository.transaction(async (tx) => {
+      await this.staffAccess(dto.branchId, user, tx);
+      const quote = await this.inStoreQuote(dto, tx);
+      return {
+        branchId: dto.branchId,
+        clientId: quote.clientId ?? null,
+        reservationId: quote.reservation?.id ?? null,
+        wholesale: quote.wholesale,
+        currency: this.currency(),
+        total: quote.total.toNumber(),
+        items: quote.lines.map(presentLine),
+      };
+    });
+  }
+
+  async searchPosCustomers(
+    dto: SearchPosCustomersDto,
+    user: AuthenticatedUser,
+  ) {
+    return this.repository.transaction(async (tx) => {
+      await this.staffAccess(dto.branchId, user, tx);
+      await this.activeBranch(dto.branchId, tx);
+      return (await this.repository.searchPosCustomers(dto.search, tx)).map(
+        ({ id, wholesale, user: customer }) => ({
+          id,
+          wholesale,
+          name: customer.name,
+          email: customer.email,
+        }),
+      );
+    });
+  }
+
+  async posReservation(id: number, branchId: number, user: AuthenticatedUser) {
+    return this.repository.transaction(async (tx) => {
+      await this.staffAccess(branchId, user, tx);
+      await this.activeBranch(branchId, tx);
+      const reservation = await this.repository.findPosReservation(id, tx);
+      if (!reservation || reservation.branchId !== branchId)
+        throw new NotFoundException('Reservation was not found in this branch');
+      if (reservation.status !== 'CUSTOMER_PRESENT' || reservation.sale)
+        throw new ConflictException(
+          'Reservation must have the customer present and no previous sale',
+        );
+      if (!reservation.client.user.active)
+        throw new BadRequestException('Client does not exist or is inactive');
+      return {
+        id: reservation.id,
+        branchId,
+        client: {
+          id: reservation.client.id,
+          wholesale: reservation.client.wholesale,
+          name: reservation.client.user.name,
+          email: reservation.client.user.email,
+        },
+        items: reservation.items
+          .filter((i) => ['PENDING', 'PREPARED'].includes(i.status))
+          .map((i) => ({
+            productId: i.productId,
+            sizeId: i.sizeId,
+            colorId: i.colorId,
+            quantity: i.quantity,
+            productName: i.product.name,
+            sizeName: i.size.name,
+            colorName: i.color.name,
+          })),
+      };
+    });
+  }
+
   async previewCheckout(dto: CheckoutPreviewDto, user: AuthenticatedUser) {
     return this.repository.transaction(async (tx) => {
       const clientId = await this.customer(user, tx);
@@ -220,12 +332,22 @@ export class SalesService {
   }
 
   async checkout(dto: CheckoutDto, user: AuthenticatedUser) {
+    const cashOnDelivery = dto.paymentOption === 'CASH_ON_DELIVERY';
+    const delivery = cashOnDelivery
+      ? {
+          cashOnDelivery: true,
+          deliveryName: dto.deliveryName!.trim(),
+          deliveryPhone: dto.deliveryPhone!.trim(),
+          deliveryAddress: dto.deliveryAddress!.trim(),
+        }
+      : {};
     const requestHash = fingerprint({
       type: 'CHECKOUT',
       cartId: dto.cartId,
       branchId: dto.branchId,
       channel: dto.channel,
       quoteHash: dto.quoteHash,
+      ...delivery,
     });
     const sale = await this.repository.transaction(async (tx) => {
       const clientId = await this.customer(user, tx);
@@ -258,12 +380,13 @@ export class SalesService {
           total: quote.total,
           currency: quote.currency,
           stockReserved: true,
-          expiresAt,
+          expiresAt: cashOnDelivery ? null : expiresAt,
+          ...delivery,
           items: { create: quote.lines },
           payments: {
             create: {
-              method: 'GATEWAY',
-              type: 'ELECTRONIC',
+              method: cashOnDelivery ? 'CASH' : 'GATEWAY',
+              type: cashOnDelivery ? 'IN_STORE' : 'ELECTRONIC',
               amount: quote.total,
               status: 'PENDING',
             },
@@ -288,6 +411,92 @@ export class SalesService {
       return created;
     });
     return this.present(sale);
+  }
+
+  async deliver(id: number, dto: DeliverSaleDto, user: AuthenticatedUser) {
+    const result = await this.repository.transaction(async (tx) => {
+      const sale = await this.requireSale(id, tx);
+      const employeeId = await this.staffAccess(sale.branchId ?? 0, user, tx);
+      const payment = sale.payments.find(
+        (p) => p.method === 'CASH' && p.type === 'IN_STORE',
+      );
+      if (
+        !sale.cashOnDelivery ||
+        !sale.branchId ||
+        !payment ||
+        !sale.total.equals(dto.expectedTotal)
+      )
+        throw new ConflictException(
+          'El pedido o el importe no corresponde a contra entrega.',
+        );
+      // Replay the same delivery even after closing the shift; never collect twice.
+      if (
+        sale.status === 'COMPLETED' &&
+        sale.shiftId === dto.shiftId &&
+        payment.status === 'APPROVED'
+      ) {
+        const shift = await tx.cashShift.findUnique({
+          where: { id: dto.shiftId },
+        });
+        if (shift?.userId !== user.id)
+          throw new ForbiddenException('El cobro pertenece a otro cajero.');
+        return sale;
+      }
+      if (
+        sale.status !== 'PENDING_PAYMENT' ||
+        !sale.stockReserved ||
+        payment.status !== 'PENDING'
+      )
+        throw new ConflictException('El pedido ya fue entregado o cancelado.');
+      await this.repository.requireOnlineShift(dto.shiftId, tx);
+      await this.repository.recordShiftSale(
+        dto.shiftId,
+        user.id,
+        sale.branchId,
+        sale.currency,
+        'CASH',
+        sale.total,
+        tx,
+      );
+      for (const item of sortedItems(sale.items)) {
+        const stock = await this.requireStock(sale.branchId, item, tx);
+        await this.repository.changeStock(
+          stock,
+          -item.quantity,
+          -item.quantity,
+          tx,
+        );
+        await this.repository.movement(
+          {
+            inventoryId: stock.id,
+            employeeId,
+            type: 'SALE',
+            quantity: item.quantity,
+            reference: `SALE:${sale.id}`,
+          },
+          tx,
+        );
+      }
+      const now = new Date();
+      await this.repository.updatePayment(
+        payment.id,
+        { status: 'APPROVED', paidAt: now },
+        tx,
+      );
+      return this.repository.update(
+        id,
+        {
+          status: 'COMPLETED',
+          stockReserved: false,
+          confirmedAt: now,
+          deliveredAt: now,
+          shift: { connect: { id: dto.shiftId } },
+          ...(employeeId ? { employee: { connect: { id: employeeId } } } : {}),
+        },
+        tx,
+      );
+    });
+    return this.present(result);
   }
 
   // Internal integration boundary: call only after the Payments module verifies the provider event.
@@ -405,6 +614,8 @@ export class SalesService {
   ) {
     return this.repository.transaction(async (tx) => {
       const sale = await this.requireSale(id, tx);
+      if (sale.cashOnDelivery)
+        throw new ConflictException('Este pedido se cobra contra entrega.');
       if (sale.status === 'CANCELLED') return;
       if (sale.channel === 'IN_STORE' || sale.status !== 'PENDING_PAYMENT')
         throw new ConflictException('Sale is no longer awaiting payment');
@@ -539,6 +750,7 @@ export class SalesService {
       tx,
       false,
       new Date(),
+      cart.client?.wholesale,
     );
     const total = saleTotal(lines);
     const currency = this.currency();
@@ -559,6 +771,7 @@ export class SalesService {
     tx: Prisma.TransactionClient,
     reserved: boolean,
     now: Date,
+    wholesale = false,
   ) {
     const lines: SaleLine[] = [];
     for (const item of items) {
@@ -573,7 +786,14 @@ export class SalesService {
       if (available < item.quantity)
         throw new ConflictException(`Insufficient stock: ${variantKey(item)}`);
       lines.push(
-        priceLine(item, stock.product, stock.size.name, stock.color.name, now),
+        priceLine(
+          item,
+          stock.product,
+          stock.size.name,
+          stock.color.name,
+          now,
+          wholesale,
+        ),
       );
     }
     return lines;

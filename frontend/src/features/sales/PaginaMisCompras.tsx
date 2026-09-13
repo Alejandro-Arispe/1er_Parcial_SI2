@@ -1,14 +1,18 @@
 import { Link } from 'react-router-dom';
+import { useState } from 'react';
+import { Paginacion } from '../../components/ui/Paginacion';
 import { BadgeCanal, BadgeVenta } from '../../components/ui/Badges';
 import { Cargando, ErrorEstado, Vacio } from '../../components/ui/Estados';
-import { useVentas } from '../../hooks/useComercio';
+import { useMisCompras } from '../../hooks/useComercio';
 import { fecha, moneda } from '../../lib/format';
 
 export default function PaginaMisCompras() {
-  const consulta = useVentas();
+  const [page, setPage] = useState(1);
+  const consulta = useMisCompras({ page, page_size: 20 });
 
   if (consulta.isPending) return <Cargando texto="Cargando tus compras..." />;
-  if (consulta.isError) return <ErrorEstado error={consulta.error} onReintentar={() => consulta.refetch()} />;
+  if (consulta.isError)
+    return <ErrorEstado error={consulta.error} onReintentar={() => consulta.refetch()} />;
 
   const ventas = consulta.data?.items ?? [];
 
@@ -25,7 +29,11 @@ export default function PaginaMisCompras() {
         <Vacio
           titulo="Todavia no tienes compras"
           mensaje="Cuando realices tu primera compra la veras aqui con su comprobante."
-          accion={<Link to="/catalogo" className="fs-btn fs-btn--acento">Ir al catalogo</Link>}
+          accion={
+            <Link to="/catalogo" className="fs-btn fs-btn--acento">
+              Ir al catalogo
+            </Link>
+          }
         />
       ) : (
         <div className="fs-tarjeta fs-tabla-scroll">
@@ -46,12 +54,20 @@ export default function PaginaMisCompras() {
                 <tr key={v.id_venta}>
                   <td>#{v.id_venta}</td>
                   <td>{fecha(v.fecha)}</td>
-                  <td><BadgeCanal canal={v.canal} /></td>
+                  <td>
+                    <BadgeCanal canal={v.canal} />
+                  </td>
                   <td>{v.detalles.reduce((acc, d) => acc + d.cantidad, 0)}</td>
-                  <td><BadgeVenta estado={v.estado} /></td>
-                  <td className="fs-tabla-num">{moneda(v.total)}</td>
+                  <td>
+                    <BadgeVenta estado={v.estado} />
+                    {v.contra_entrega && <span className="fs-sub"> · Contra entrega</span>}
+                  </td>
+                  <td className="fs-tabla-num">{moneda(v.total, v.moneda)}</td>
                   <td className="fs-td-acciones">
-                    <Link to={`/mis-compras/${v.id_venta}`} className="fs-btn fs-btn--contorno fs-btn--s">
+                    <Link
+                      to={`/mis-compras/${v.id_venta}`}
+                      className="fs-btn fs-btn--contorno fs-btn--s"
+                    >
                       Ver detalle
                     </Link>
                   </td>
@@ -60,6 +76,9 @@ export default function PaginaMisCompras() {
             </tbody>
           </table>
         </div>
+      )}
+      {consulta.data && (
+        <Paginacion page={page} pageSize={20} total={consulta.data.total} onCambiar={setPage} />
       )}
     </div>
   );

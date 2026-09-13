@@ -26,6 +26,8 @@ export const CanalVenta = {
 export type CanalVenta = (typeof CanalVenta)[keyof typeof CanalVenta];
 
 export const EstadoVenta = {
+  BORRADOR: 'BORRADOR',
+  REEMBOLSADA: 'REEMBOLSADA',
   PENDIENTE: 'PENDIENTE',
   PAGADA: 'PAGADA',
   ENTREGADA: 'ENTREGADA',
@@ -49,6 +51,7 @@ export const TipoPago = {
 export type TipoPago = (typeof TipoPago)[keyof typeof TipoPago];
 
 export const EstadoPago = {
+  REEMBOLSADO: 'REEMBOLSADO',
   PENDIENTE: 'PENDIENTE',
   APROBADO: 'APROBADO',
   RECHAZADO: 'RECHAZADO',
@@ -97,6 +100,9 @@ export interface Rol {
 }
 
 export interface Usuario {
+  proveedor_nombre?: string;
+  proveedor_activo?: boolean;
+  mayorista?: boolean;
   id_usuario: number;
   nombre: string;
   email: string;
@@ -129,6 +135,7 @@ export interface Empleado extends Usuario {
 }
 
 export interface Sucursal {
+  nombre_almacen?: string;
   id_sucursal: number;
   nombre: string;
   ciudad: string;
@@ -184,6 +191,8 @@ export interface Color {
 }
 
 export interface Producto {
+  imagenes?: string[];
+  precio_mayorista?: number | null;
   id_producto: number;
   nombre: string;
   descripcion: string;
@@ -339,7 +348,7 @@ export interface DetalleVenta {
   cantidad: number;
   precio_unitario: number;
   descuento: number;
-  producto?: Producto;
+  producto?: Pick<Producto, 'id_producto' | 'nombre'>;
   talla?: Talla;
   color?: Color;
 }
@@ -356,6 +365,12 @@ export interface Pago {
 }
 
 export interface Venta {
+  contra_entrega?: boolean;
+  id_turno?: number | null;
+  moneda?: string;
+  numero_comprobante?: string;
+  comprobante_disponible?: boolean;
+  cajero?: string;
   id_venta: number;
   id_cliente: number | null;
   id_empleado: number | null;

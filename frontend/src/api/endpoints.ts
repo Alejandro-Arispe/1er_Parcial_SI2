@@ -57,10 +57,14 @@ export const endpoints = {
     cancelar: (id: number | string) => `/reservations/${id}/cancel`,
   },
   ventas: {
-    lista: '/ventas',
-    detalle: (id: number | string) => `/ventas/${id}`,
-    crear: '/ventas',
-    pagos: (id: number | string) => `/ventas/${id}/pagos`,
+    lista: '/sales',
+    propias: '/sales/mine',
+    detalle: (id: number | string) => `/sales/${id}`,
+    comprobante: (id: number | string) => `/sales/${id}/receipt`,
+    crear: '/sales/in-store',
+    previsualizar: '/sales/in-store/preview',
+    clientes: '/sales/in-store/customers',
+    reserva: (id: number) => `/sales/in-store/reservations/${id}`,
   },
   usuarios: {
     lista: '/users',

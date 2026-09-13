@@ -111,7 +111,7 @@ export class CartService {
         colorId: variant.colorId,
       },
       quantity,
-      productPrice(product).currentPrice,
+      productPrice(product, new Date(), cart.client?.wholesale).currentPrice,
       tx,
     );
     return this.present(await this.cartRepository.findById(cart.id, tx), tx);
@@ -124,7 +124,7 @@ export class CartService {
     const now = new Date();
     let total = new Prisma.Decimal(0);
     const items = cart.items.map((item) => {
-      const pricing = productPrice(item.product, now);
+      const pricing = productPrice(item.product, now, cart.client?.wholesale);
       const valid = this.validVariant(item.product, item);
       const availability = valid
         ? inventory

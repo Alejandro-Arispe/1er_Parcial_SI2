@@ -1,6 +1,7 @@
 # FashionStore - Frontend Web
 
 Aplicacion web de FashionStore (MVP academico, Sistemas de Informacion II).
+Para retomar el trabajo en otra sesion: [contexto y pendientes actuales](../CONTEXTO_Y_PENDIENTES.md).
 React + TypeScript + Vite. Cubre la tienda para clientes y los paneles internos
 de administracion, sucursal, caja y proveedor.
 
@@ -15,13 +16,31 @@ La integracion con NestJS se realiza por etapas. Ya estan conectados:
   devoluciones e historial por variante/sucursal.
 - Carrito del cliente con precios vigentes, alertas y disponibilidad por tienda.
 - Reservas de varias prendas, listado/cancelacion del cliente y atencion en sucursal.
+- Galeria de hasta 8 fotos por producto, carga de archivos mediante Cloudinary y seleccion de foto principal.
+- Clientes mayoristas administrados desde Usuarios y precio mayorista opcional por producto.
+- Nombre del almacen unico de cada sucursal, visible en administracion e inventario.
+- POS con variantes, clientes mayoristas, revision del total, cobros y conversion parcial de reservas.
+- Historial de ventas/compras y comprobantes con precios historicos e impresion.
+- Cajas fisicas, turno propio con saldo inicial, cierre y arqueo con faltante/sobrante e historial por permisos.
+- Ventas offline en efectivo a consumidor final: PWA, descarga de precios/stock, cola durable y sincronizacion sin duplicados.
+- Checkout con Stripe en modo prueba y pedidos contra entrega con cobro en turno, cancelacion y recuperacion de solicitudes.
+- Proveedor: cuenta asociada desde Usuarios, fichas propias, disponibilidad de suministro y consulta de entregas programadas.
 
-**Pendiente:** caja/Stripe,
-notificaciones y reportes/dashboard conservan los contratos de la demo. Sus
-pantallas todavia pueden mostrar errores con la API real. El pago web real esta
-deshabilitado hasta integrar checkout; no envia compras al endpoint de la demo. IA queda para el final;
-las recomendaciones automaticas solo se consultan en modo demo. El acceso propio
-del proveedor necesita definir sus permisos y relacion con el catalogo en NestJS.
+Configuracion y reglas de esta etapa: [catalogo, almacenes y fotos](../backend/docs/catalogo-almacenes-fotos.md).
+
+Guia para probar caja: [POS conectado a React](../backend/docs/pos-react.md).
+
+Guia de esta etapa: [turnos de caja y arqueo](../backend/docs/turnos-caja.md).
+
+Guia para la presentacion: [ventas offline y PWA](../backend/docs/ventas-offline.md).
+
+Guia para pagar y entregar pedidos: [checkout con Stripe y contra entrega](../backend/docs/checkout-react.md).
+
+Guia para proveedores: [vinculacion de cuenta y portal](../backend/docs/proveedor-react.md).
+
+**Pendiente:** notificaciones y reportes/dashboard conservan los contratos de la demo. Sus
+pantallas todavia pueden mostrar errores con la API real. IA queda para el final;
+las recomendaciones automaticas solo se consultan en modo demo.
 
 ## Puesta en marcha
 
@@ -32,13 +51,13 @@ npm run dev
 
 Scripts disponibles:
 
-| Script | Que hace |
-|---|---|
-| `npm run dev` | Servidor de desarrollo en http://localhost:5173 |
-| `npm run build` | Verificacion de tipos + build de produccion |
-| `npm run preview` | Sirve el build generado |
-| `npm run lint` | Analisis estatico (oxlint) |
-| `npm test` | Contratos HTTP, formularios, autenticacion, sesion y rutas protegidas |
+| Script            | Que hace                                                              |
+| ----------------- | --------------------------------------------------------------------- |
+| `npm run dev`     | Servidor de desarrollo en http://localhost:5173                       |
+| `npm run build`   | Verificacion de tipos + build de produccion                           |
+| `npm run preview` | Sirve el build generado                                               |
+| `npm run lint`    | Analisis estatico (oxlint)                                            |
+| `npm test`        | Contratos HTTP, formularios, autenticacion, sesion y rutas protegidas |
 
 ## Variables de entorno
 
@@ -61,13 +80,13 @@ volver a iniciar sesion.
 
 ## Cuentas de prueba (mock)
 
-| Rol | Correo | Contrasena |
-|---|---|---|
-| Administrador | admin@fashionstore.bo | admin123 |
+| Rol                   | Correo                    | Contrasena   |
+| --------------------- | ------------------------- | ------------ |
+| Administrador         | admin@fashionstore.bo     | admin123     |
 | Encargado de sucursal | encargado@fashionstore.bo | encargado123 |
-| Cajero | cajero@fashionstore.bo | cajero123 |
-| Cliente | cliente@fashionstore.bo | cliente123 |
-| Proveedor | proveedor@fashionstore.bo | proveedor123 |
+| Cajero                | cajero@fashionstore.bo    | cajero123    |
+| Cliente               | cliente@fashionstore.bo   | cliente123   |
+| Proveedor             | proveedor@fashionstore.bo | proveedor123 |
 
 La pantalla de login permite cargarlas con un clic solo en modo mock.
 
@@ -170,9 +189,8 @@ PostgreSQL y usuarios reales.
   limite de 100 unidades por variante. Agregar al carrito no reserva stock.
 - Las modificaciones del carrito se serializan, cancelan lecturas anteriores y
   no guardan respuestas de otra sesion ni ejecutan cambios en cola bajo otra cuenta.
-- Checkout real queda cerrado con un mensaje de disponibilidad futura. La demo
-  conserva su flujo simulado. Las entregas de proveedor reales no consultan el
-  inventario interno hasta definir su acceso en el backend.
+- Checkout y entregas de proveedor se integraron en etapas posteriores: ver las
+  guias de checkout y proveedor enlazadas al inicio de este documento.
 
 Esta etapa no modifica NestJS. Dos mejoras futuras que requieren analizar el
 backend: filtros de inventario en el servidor para grandes volumenes y un
@@ -248,14 +266,14 @@ Reglas de negocio implementadas en `src/lib/domain.ts`:
 
 ## Roles y rutas
 
-| Area | Rutas | Roles |
-|---|---|---|
-| Tienda | `/`, `/catalogo`, `/producto/:id` | publico |
-| Cliente | `/reservas/nueva`, `/carrito`, `/checkout`, `/mis-compras`, `/mis-reservas` | CLIENTE |
-| Administracion | `/admin/...` | ADMINISTRADOR |
-| Sucursal | `/sucursal/...` | ENCARGADO_SUCURSAL |
-| Caja | `/caja`, `/caja/ventas` | CAJERO |
-| Proveedor | `/proveedor/...` | PROVEEDOR |
+| Area           | Rutas                                                                       | Roles              |
+| -------------- | --------------------------------------------------------------------------- | ------------------ |
+| Tienda         | `/`, `/catalogo`, `/producto/:id`                                           | publico            |
+| Cliente        | `/reservas/nueva`, `/carrito`, `/checkout`, `/mis-compras`, `/mis-reservas` | CLIENTE            |
+| Administracion | `/admin/...`                                                                | ADMINISTRADOR      |
+| Sucursal       | `/sucursal/...`                                                             | ENCARGADO_SUCURSAL |
+| Caja           | `/caja`, `/caja/ventas`, `/caja/turnos`, `/caja/offline`                                                     | CAJERO, ENCARGADO_SUCURSAL, ADMINISTRADOR |
+| Proveedor      | `/proveedor/...`                                                            | PROVEEDOR          |
 
 Los permisos por area estan centralizados en `src/routes/permisos.ts` y los usan
 tanto los guards del router como la redireccion posterior al login.
@@ -271,7 +289,7 @@ latencia artificial para que se vean los estados de carga. Los datos son
 minimos (12 productos, 3 sucursales, 6 usuarios, 8 ventas) y se conservan en
 `sessionStorage` para que una demostracion no se pierda al recargar.
 
-Reservas ya esta integrada. IA, caja/Stripe y notificaciones/reportes
+Reservas, POS, turnos, ventas offline, checkout con Stripe, contra entrega e historiales ya estan integrados. IA y notificaciones/reportes
 requieren su propia integracion; el proximo bloque se definira con el usuario. Al migrar cada modulo hay que adaptar
 conjuntamente sus rutas, metodos, DTO, permisos y flujo de negocio; cambiar solo
 el endpoint no completa la integracion. Los mocks se importan bajo demanda.

@@ -36,7 +36,7 @@ describe('UsersService', () => {
       expect.objectContaining({
         email: 'ana@example.com',
         roleIds: [4],
-        client: { phone: '70000000', address: undefined },
+        client: { phone: '70000000', address: undefined, wholesale: false },
       }),
     );
   });

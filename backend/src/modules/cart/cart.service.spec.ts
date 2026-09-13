@@ -40,6 +40,7 @@ describe('CartService', () => {
       imageUrl: null,
       active: true,
       price: new Prisma.Decimal('0.10'),
+      wholesalePrice: null,
       discountPercent: new Prisma.Decimal(0),
       promotionStart: null,
       promotionEnd: null,
@@ -49,6 +50,7 @@ describe('CartService', () => {
     cart = {
       id: 1,
       clientId: 2,
+      client: { wholesale: false },
       status: 'ACTIVE',
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -91,6 +93,29 @@ describe('CartService', () => {
       hasAvailability: false,
     });
     expect(repository.createActive).toHaveBeenCalledWith(2, expect.anything());
+  });
+
+  it('uses the customer tier both when saving and when revaluing an existing cart', async () => {
+    addFixture(2);
+    product.wholesalePrice = new Prisma.Decimal('0.08');
+    cart.client.wholesale = true;
+    await service.addItem({ ...variant, quantity: 1 }, customer);
+    expect(repository.saveItem).toHaveBeenCalledWith(
+      1,
+      variant,
+      3,
+      new Prisma.Decimal('0.08'),
+      expect.anything(),
+    );
+    expect(await service.getActive(customer)).toMatchObject({
+      total: 0.16,
+      items: [{ unitPrice: 0.08, priceChanged: true }],
+    });
+    cart.client.wholesale = false;
+    expect(await service.getActive(customer)).toMatchObject({
+      total: 0.2,
+      items: [{ unitPrice: 0.1 }],
+    });
   });
 
   it('rejects non-customers and missing active profiles', async () => {

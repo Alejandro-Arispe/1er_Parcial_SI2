@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { USAR_MOCKS } from '../../api/config';
+import ProductosProveedorReal from './ProductosProveedorReal';
 import { BadgeActivo } from '../../components/ui/Badges';
 import { ErrorEstado, FilasSkeleton, Vacio } from '../../components/ui/Estados';
 import { Modal } from '../../components/ui/Modal';
@@ -14,6 +16,9 @@ import type { Producto } from '../../types/domain';
  * de sus prendas (temporada y coleccion a la que pertenecen).
  */
 export default function PaginaProductosProveedor() {
+  return USAR_MOCKS ? <ProductosDemo /> : <ProductosProveedorReal />;
+}
+function ProductosDemo() {
   const { usuario } = useAuth();
   const idProveedor = usuario?.id_proveedor ?? undefined;
 

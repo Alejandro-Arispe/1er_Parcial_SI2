@@ -28,6 +28,12 @@ export const environmentValidationSchema = Joi.object({
     .empty('')
     .pattern(/^pk_test_[A-Za-z0-9]+$/)
     .optional(),
+  CLOUDINARY_CLOUD_NAME: Joi.string()
+    .empty('')
+    .pattern(/^[a-zA-Z0-9_-]+$/)
+    .optional(),
+  CLOUDINARY_API_KEY: Joi.string().empty('').optional(),
+  CLOUDINARY_API_SECRET: Joi.string().empty('').optional(),
   SALES_CURRENCY: Joi.string()
     .pattern(/^[A-Z]{3}$/)
     .default('BOB'),
@@ -46,6 +52,7 @@ export const environmentValidationSchema = Joi.object({
   SEED_ADMIN_PASSWORD: Joi.string().min(8).max(72).optional(),
 })
   .and('STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_PUBLISHABLE_KEY')
+  .and('CLOUDINARY_CLOUD_NAME', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET')
   .unknown(true);
 
 export const validateEnvironment = (

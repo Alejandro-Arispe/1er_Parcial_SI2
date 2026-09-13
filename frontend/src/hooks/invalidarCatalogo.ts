@@ -6,6 +6,7 @@ export function invalidarCatalogo(qc: QueryClient) {
     [
       'productos',
       'producto',
+      'carrito',
       'recursos-ra',
       'disponibilidad',
       'inventario',
@@ -17,6 +18,7 @@ export function invalidarCatalogo(qc: QueryClient) {
       'sucursales',
       'proveedores',
       'proveedor-productos',
+      'proveedor-disponibilidad',
       'usuarios',
     ].map((key) => qc.invalidateQueries({ queryKey: [key] })),
   );

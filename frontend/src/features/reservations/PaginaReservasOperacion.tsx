@@ -1,4 +1,5 @@
 import { Paginacion } from '../../components/ui/Paginacion';
+import { Link } from 'react-router-dom';
 import { SIGUIENTES_RESERVA as SIGUIENTES } from '../../lib/reservas';
 import { useState } from 'react';
 import { BadgeReserva } from '../../components/ui/Badges';
@@ -160,6 +161,8 @@ export default function PaginaReservasOperacion() {
             </ul>
 
             {r.observacion && <p className="fs-sub">Nota: {r.observacion}</p>}
+
+            {r.estado === EstadoReserva.CLIENTE_PRESENTE && <Link className="fs-btn fs-btn--acento" to={`/caja?reserva=${r.id_reserva}&sucursal=${r.id_sucursal}`}>Pasar a caja</Link>}
 
             {SIGUIENTES[r.estado].length > 0 && (
               <div className="fs-fila-wrap">

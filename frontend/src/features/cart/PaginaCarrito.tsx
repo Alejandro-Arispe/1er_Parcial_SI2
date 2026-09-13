@@ -1,5 +1,4 @@
 import { useIsMutating } from '@tanstack/react-query';
-import { USAR_MOCKS } from '../../api/config';
 import { Link, useNavigate } from 'react-router-dom';
 import { Cargando, ErrorEstado, Vacio } from '../../components/ui/Estados';
 import { ImagenProducto } from '../../components/ui/ImagenProducto';
@@ -207,10 +206,10 @@ export default function PaginaCarrito() {
         <button
           type="button"
           className="fs-btn fs-btn--acento fs-btn--bloque"
-          disabled={!USAR_MOCKS || ocupado || carrito.data?.tiene_disponibilidad === false}
+          disabled={ocupado || carrito.data?.tiene_disponibilidad === false}
           onClick={() => navegar('/checkout')}
         >
-          {USAR_MOCKS ? 'Continuar con la compra' : 'Pago en linea proximamente'}
+          Continuar con la compra
         </button>
         <Link to="/catalogo" className="fs-btn fs-btn--contorno fs-btn--bloque">
           Seguir comprando

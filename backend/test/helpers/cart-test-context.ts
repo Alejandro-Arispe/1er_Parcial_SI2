@@ -66,10 +66,20 @@ export async function cartTestContext(
       ),
     });
     const branch = await prisma.branch.create({
-      data: { name: 'Central', city: 'La Paz', address: 'Test' },
+      data: {
+        name: 'Central',
+        city: 'La Paz',
+        address: 'Test',
+        cashRegisters: { create: { name: 'Caja 1' } },
+      },
     });
     const otherBranch = await prisma.branch.create({
-      data: { name: 'Norte', city: 'La Paz', address: 'Test' },
+      data: {
+        name: 'Norte',
+        city: 'La Paz',
+        address: 'Test',
+        cashRegisters: { create: { name: 'Caja 1' } },
+      },
     });
     const size = await prisma.size.create({ data: { name: 'M' } });
     const otherSize = await prisma.size.create({ data: { name: 'L' } });

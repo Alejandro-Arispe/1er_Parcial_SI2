@@ -1,8 +1,5 @@
 import { Type } from 'class-transformer';
 import {
-  ArrayMaxSize,
-  ArrayMinSize,
-  IsArray,
   IsIn,
   IsInt,
   IsNumber,
@@ -12,40 +9,18 @@ import {
   Max,
   MaxLength,
   Min,
-  ValidateNested,
 } from 'class-validator';
-import { SaleItemDto } from './sale-item.dto.js';
+import { InStoreSelectionDto } from './in-store-selection.dto.js';
 
-export class CreateInStoreSaleDto {
+export class CreateInStoreSaleDto extends InStoreSelectionDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(2147483647)
+  shiftId: number;
+
   @IsUUID('4')
   idempotencyKey: string;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(2147483647)
-  branchId: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(2147483647)
-  clientId?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(2147483647)
-  reservationId?: number;
-
-  @IsArray()
-  @ArrayMinSize(1)
-  @ArrayMaxSize(50)
-  @ValidateNested({ each: true })
-  @Type(() => SaleItemDto)
-  items: SaleItemDto[];
 
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })

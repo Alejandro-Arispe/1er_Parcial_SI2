@@ -13,15 +13,21 @@ interface Props {
 }
 
 export function RutaProtegida({ roles, children }: Props) {
-  const { autenticado, cargando, errorSesion, reintentarSesion, tieneRol } = useAuth();
+  const { autenticado, cargando, errorSesion, reintentarSesion, tieneRol, sesionOffline } =
+    useAuth();
   const ubicacion = useLocation();
 
   if (cargando) return <Cargando texto="Verificando tu sesion..." />;
   if (errorSesion) return <ErrorEstado error={errorSesion} onReintentar={reintentarSesion} />;
 
   if (!autenticado) {
-    return <Navigate to="/login" replace state={{ desde: ubicacion.pathname + ubicacion.search }} />;
+    return (
+      <Navigate to="/login" replace state={{ desde: ubicacion.pathname + ubicacion.search }} />
+    );
   }
+
+  if (sesionOffline && ubicacion.pathname !== '/caja/offline')
+    return <Navigate to="/caja/offline" replace />;
 
   if (roles && roles.length > 0 && !tieneRol(...roles)) {
     return <Navigate to="/sin-permisos" replace />;

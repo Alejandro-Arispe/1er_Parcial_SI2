@@ -29,6 +29,7 @@ import { disponibilidadService } from './disponibilidad.service';
 import { ErrorApi } from '../types/api';
 
 export interface FiltrosProducto extends ParamsPaginacion {
+  mayorista?: boolean;
   q?: string;
   id_categoria?: number;
   id_talla?: number;
@@ -46,6 +47,8 @@ export interface FiltrosProducto extends ParamsPaginacion {
 }
 
 export interface DatosProducto {
+  imagenes?: string[];
+  precio_mayorista?: number | null;
   nombre: string;
   descripcion: string;
   precio: number;
@@ -68,6 +71,8 @@ export function productoParaApi(d: Partial<DatosProducto>, crear = false) {
     name: d.nombre?.trim(),
     description: d.descripcion,
     price: d.precio,
+    wholesalePrice: d.precio_mayorista,
+    imageUrls: d.imagenes,
     imageUrl: d.imagen_url?.trim() || undefined,
     discountPercent: d.descuento_pct,
     promotionStart: crear ? d.promo_inicio || undefined : d.promo_inicio,
@@ -91,8 +96,8 @@ function filtrosParaApi(f: FiltrosProducto) {
     seasonId: f.id_temporada,
     collectionId: f.id_coleccion,
     supplierId: f.id_proveedor,
-    minPrice: f.precio_min,
-    maxPrice: f.precio_max,
+    minPrice: f.mayorista ? undefined : f.precio_min,
+    maxPrice: f.mayorista ? undefined : f.precio_max,
   };
 }
 
@@ -106,6 +111,7 @@ async function listarProductos(f: FiltrosProducto = {}) {
       active,
     });
   if (
+    !f.mayorista &&
     !f.solo_promocion &&
     !f.orden &&
     !f.id_sucursal &&
@@ -120,7 +126,17 @@ async function listarProductos(f: FiltrosProducto = {}) {
     f.incluir_inactivos ? todasLasPaginas((page, limit) => pagina(page, limit, false)) : [],
   ]);
   let productos = [...new Map(grupos.flat().map((p) => [p.id, p])).values()].map(adaptarProducto);
-  if (f.solo_promocion) productos = productos.filter((p) => p.promocion_activa);
+  const precio = (p: (typeof productos)[number]) =>
+    f.mayorista && p.precio_mayorista != null ? p.precio_mayorista : p.precio_actual!;
+  const promocion = (p: (typeof productos)[number]) =>
+    p.promocion_activa && !(f.mayorista && p.precio_mayorista != null);
+  if (f.solo_promocion) productos = productos.filter(promocion);
+  if (f.mayorista)
+    productos = productos.filter(
+      (p) =>
+        (f.precio_min == null || precio(p) >= f.precio_min) &&
+        (f.precio_max == null || precio(p) <= f.precio_max),
+    );
   if (f.id_sucursal || f.solo_disponibles) {
     const stock = await disponibilidadService.listar({
       id_sucursal: f.id_sucursal,
@@ -133,11 +149,10 @@ async function listarProductos(f: FiltrosProducto = {}) {
   productos.sort((a, b) => {
     let orden = 0;
     if (f.orden === 'nombre') orden = a.nombre.localeCompare(b.nombre, 'es');
-    if (f.orden === 'precio_asc') orden = a.precio_actual! - b.precio_actual!;
-    if (f.orden === 'precio_desc') orden = b.precio_actual! - a.precio_actual!;
+    if (f.orden === 'precio_asc') orden = precio(a) - precio(b);
+    if (f.orden === 'precio_desc') orden = precio(b) - precio(a);
     if (f.orden === 'descuento')
-      orden =
-        (b.promocion_activa ? b.descuento_pct : 0) - (a.promocion_activa ? a.descuento_pct : 0);
+      orden = (promocion(b) ? b.descuento_pct : 0) - (promocion(a) ? a.descuento_pct : 0);
     return orden || b.id_producto - a.id_producto;
   });
   return paginarEnMemoria(productos, f);

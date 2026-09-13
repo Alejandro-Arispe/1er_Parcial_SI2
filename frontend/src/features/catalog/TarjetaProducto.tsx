@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import { Link } from 'react-router-dom';
 import { ImagenProducto } from '../../components/ui/ImagenProducto';
 import { precioActual, promocionVigente } from '../../lib/domain';
@@ -11,8 +12,10 @@ interface Props {
 }
 
 function TarjetaProductoBase({ producto, prioritaria }: Props) {
-  const enPromo = promocionVigente(producto);
-  const precio = precioActual(producto);
+  const { usuario } = useAuth();
+  const mayorista = Boolean(usuario?.mayorista && producto.precio_mayorista != null);
+  const enPromo = !mayorista && promocionVigente(producto);
+  const precio = mayorista ? producto.precio_mayorista! : precioActual(producto);
 
   return (
     <article className="fs-producto">
@@ -31,6 +34,7 @@ function TarjetaProductoBase({ producto, prioritaria }: Props) {
         </Link>
         <div className="fs-producto__precio">
           <strong>{moneda(precio)}</strong>
+          {mayorista && <span className="fs-badge">Precio mayorista</span>}
           {enPromo && <s>{moneda(producto.precio)}</s>}
         </div>
         <div className="fs-producto__colores" aria-label="Colores disponibles">

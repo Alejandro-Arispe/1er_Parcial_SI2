@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import { useSearchParams } from 'react-router-dom';
 import { ErrorEstado, RejillaSkeleton, Vacio } from '../../components/ui/Estados';
 import { Paginacion } from '../../components/ui/Paginacion';
@@ -10,6 +11,7 @@ import { TarjetaProducto } from './TarjetaProducto';
 const POR_PAGINA = 12;
 
 export default function PaginaCatalogo() {
+  const { usuario } = useAuth();
   const [params, setParams] = useSearchParams();
   const [busqueda, setBusqueda] = useState(params.get('q') ?? '');
 
@@ -33,7 +35,7 @@ export default function PaginaCatalogo() {
     };
   }, [params]);
 
-  const consulta = useProductos(filtros);
+  const consulta = useProductos({ ...filtros, mayorista: usuario?.mayorista });
 
   function actualizar(clave: string, valor?: string | number | null) {
     const siguiente = new URLSearchParams(params);

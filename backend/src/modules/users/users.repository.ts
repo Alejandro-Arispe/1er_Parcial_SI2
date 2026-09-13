@@ -3,6 +3,8 @@ import { Prisma, RoleName } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../database/prisma/prisma.service.js';
 
 export const userPublicSelect = {
+  supplier: { select: { id: true, name: true, active: true } },
+  supplierId: true,
   id: true,
   name: true,
   email: true,
@@ -28,6 +30,7 @@ const userAuthenticationSelect = {
 } satisfies Prisma.UserSelect;
 
 interface CreateUserRecord {
+  supplierId?: number;
   name: string;
   email: string;
   passwordHash: string;
@@ -36,6 +39,7 @@ interface CreateUserRecord {
   client?: {
     phone?: string;
     address?: string;
+    wholesale?: boolean;
   };
   employee?: {
     branchId: number;
@@ -52,6 +56,7 @@ interface FindUsersOptions {
 }
 
 interface ClientUpdate {
+  wholesale?: boolean;
   phone?: string;
   address?: string;
 }
@@ -99,10 +104,19 @@ export class UsersRepository {
       .then((count) => count > 0);
   }
 
+  supplierExists(id: number) {
+    return this.prisma.supplier
+      .count({ where: { id, active: true } })
+      .then((count) => count > 0);
+  }
+
   create(data: CreateUserRecord) {
     return this.prisma.user.create({
       data: {
         name: data.name,
+        supplier: data.supplierId
+          ? { connect: { id: data.supplierId } }
+          : undefined,
         email: data.email,
         passwordHash: data.passwordHash,
         active: data.active,
