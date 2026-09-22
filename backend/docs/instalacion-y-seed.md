@@ -114,19 +114,19 @@ npm run prisma:seed:demo
 **Incluye automáticamente la carga base**; no necesitas ejecutar antes la opción A.
 Sobre una base vacía deja:
 
-| Datos | Resultado |
-|---|---|
-| Roles | 5 |
-| Usuarios | 1 administrador, 3 encargados, 3 cajeros y 4 clientes |
-| Sucursales | Central base y 3 sucursales `DEMO - ...` |
-| Productos | Camisa Oxford base y 12 prendas DEMO |
-| Variantes por sucursal | 218 registros de inventario en total |
-| Ventas | 30 completadas: 18 presenciales, 6 WEB y 6 MOBILE |
-| Otros pedidos | 1 pendiente, 1 cancelado y 1 cancelado con pago reembolsado |
-| Reservas | 7, una por cada estado |
-| Notificaciones | 7 avisos de reserva, con lectura individual por usuario |
-| Carritos | 4 activos y 15 convertidos conservados como historial |
-| Entradas pendientes | 3, una por sucursal DEMO |
+| Datos           | Resultado                                             |
+|---              |---                                                    |
+| Roles           | 5                                                     |
+| Usuarios        | 1 administrador, 3 encargados, 3 cajeros y 4 clientes |
+| Sucursales      | Central base y 3 sucursales `DEMO - ...`              |
+| Productos       | Camisa Oxford base y 12 prendas DEMO                  |
+| Variantes por sucursal | 218 registros de inventario en total           |
+| Ventas          | 30 completadas: 18 presenciales, 6 WEB y 6 MOBILE     |
+| Otros pedidos   | 1 pendiente, 1 cancelado y 1 cancelado con pago reembolsado |
+| Reservas        | 7, una por cada estado                                |
+| Notificaciones  | 7 avisos de reserva, con lectura individual por usuario |
+| Carritos        | 4 activos y 15 convertidos conservados como historial |
+| Entradas pendientes | 3, una por sucursal DEMO                          |
 
 Incluye descuentos, stock agotado y bajo, movimientos de entrada, venta, retención
 y liberación. Las ventas históricas abarcan los últimos 30 días de la fecha de
@@ -147,6 +147,63 @@ Las reservas activas tienen cita al día siguiente de la referencia; ampliar el
 reporte de reservas para incluirlas. El checkout pendiente vence 15 minutos después
 de cargarlo. Al iniciar el backend, los procesos automáticos actualizan los
 vencimientos; por eso los estados y cantidades reservadas pueden cambiar después.
+
+### Opción C: demostración masiva de Bolivia
+
+```powershell
+npm run prisma:seed:massive
+```
+
+Esta carga es independiente de los seeds base y DEMO, y está pensada para una
+presentación con bastante información. No requiere variables de seed adicionales:
+solo `DATABASE_URL` y las migraciones aplicadas. Por seguridad, se rechaza cuando
+`NODE_ENV=production`.
+
+Sobre una base vacía crea aproximadamente **3.142 registros** relacionados:
+
+| Datos | Resultado |
+|---|---:|
+| Sucursales | 8, todas en Bolivia |
+| Productos | 80, con fotos, precios mayoristas y variantes |
+| Clientes | 120 |
+| Pedidos / ventas | 400: 320 completadas, 40 pendientes y 40 canceladas |
+| Inventario | 160 variantes distribuidas entre las sucursales |
+| Pagos y movimientos | Un pago y un movimiento por pedido |
+| Personal | 1 administrador, 8 encargados, 8 cajeros y 6 proveedores |
+
+Los datos del seed masivo no contienen acentos: nombres, correos, ciudades,
+direcciones, productos y textos almacenados usan caracteres ASCII. Todas las
+cuentas que crea, incluido el administrador, usan la contraseña `Password123`.
+La contraseña cumple las reglas actuales de bcrypt; no es necesario añadir `+`.
+Es exclusivamente una contraseña de demostración, por lo que no debe usarse fuera
+de una base local de prueba.
+
+Las cuentas principales son:
+
+| Cuenta | Uso |
+|---|---|
+| `admin@masivo.fashionstore.test` | Administrador |
+| `cliente001@masivo.fashionstore.test` a `cliente120@masivo.fashionstore.test` | Clientes |
+| `encargado01@masivo.fashionstore.test` a `encargado08@masivo.fashionstore.test` | Encargados de sucursal |
+| `cajero01@masivo.fashionstore.test` a `cajero08@masivo.fashionstore.test` | Cajeros |
+| `proveedor01@masivo.fashionstore.test` a `proveedor06@masivo.fashionstore.test` | Proveedores |
+
+Para fijar las fechas del historial sin modificar el código, definir antes de la
+primera ejecución una fecha válida de Bolivia:
+
+```dotenv
+SEED_MASSIVE_DATE=2026-09-12
+```
+
+Las ventas completadas se reparten entre los últimos 90 días y usan moneda BOB.
+Los pedidos pendientes apartan una unidad y vencen dos días después de la fecha de
+referencia; si esa fecha ya pasó, el proceso del backend puede vencerlos al iniciar.
+
+El seed usa una transacción y un bloqueo de PostgreSQL. Al repetirlo detecta su
+administrador marcador y devuelve `created: false`, sin duplicar ni reponer datos.
+No es un comando de reinicio ni de reparación: para recuperar el conjunto exacto,
+usar una base nueva. Puede coexistir con el seed base o DEMO, pero una base vacía
+es la forma recomendada de conservar los conteos descritos.
 
 ## 6. Cuentas de demostración
 
