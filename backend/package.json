@@ -27,6 +27,7 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:seed": "prisma db seed",
     "prisma:seed:demo": "tsx prisma/seed-demo.ts",
+    "prisma:seed:massive": "tsx prisma/seed-massive.ts",
     "prisma:seed:reservations": "tsx prisma/seed-reservations.ts",
     "prisma:seed:cart": "tsx prisma/seed-cart.ts",
     "prisma:seed:sales": "tsx prisma/seed-sales.ts",
