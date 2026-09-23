@@ -66,7 +66,7 @@ az containerapp create -g $RG -n fashionstore-api --environment $ENVNAME `
   --secrets database-url='<DATABASE_URL>' jwt-secret='<JWT_64_HEX>' gemini-key='<GEMINI_API_KEY>' `
   --env-vars NODE_ENV=production RUN_MIGRATIONS=true DATABASE_URL=secretref:database-url `
     JWT_SECRET=secretref:jwt-secret AI_PROVIDER=gemini GEMINI_API_KEY=secretref:gemini-key `
-    GEMINI_MODEL=gemini-3.6-flash RESERVATION_TIME_ZONE=America/La_Paz SALES_CURRENCY=BOB
+    GEMINI_MODEL=gemini-3.6-flash GEMINI_IMAGE_MODEL=gemini-3.1-flash-image RESERVATION_TIME_ZONE=America/La_Paz SALES_CURRENCY=BOB
 ```
 
 - `--min-replicas 1`: los procesos de vencimiento de reservas y checkouts corren dentro de la API. Además, una sola réplica mantiene coherente el límite de solicitudes de IA, que se guarda en memoria.
