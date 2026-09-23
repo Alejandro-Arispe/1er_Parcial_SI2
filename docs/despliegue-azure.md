@@ -66,7 +66,7 @@ az containerapp create -g $RG -n fashionstore-api --environment $ENVNAME `
   --secrets database-url='<DATABASE_URL>' jwt-secret='<JWT_64_HEX>' gemini-key='<GEMINI_API_KEY>' `
   --env-vars NODE_ENV=production RUN_MIGRATIONS=true DATABASE_URL=secretref:database-url `
     JWT_SECRET=secretref:jwt-secret AI_PROVIDER=gemini GEMINI_API_KEY=secretref:gemini-key `
-    GEMINI_MODEL=gemini-3.6-flash GEMINI_IMAGE_MODEL=gemini-3.1-flash-image RESERVATION_TIME_ZONE=America/La_Paz SALES_CURRENCY=BOB
+    GEMINI_MODEL=gemini-3.6-flash GEMINI_IMAGE_MODEL=gemini-3.1-flash-image FIREBASE_PROJECT_ID=shoping-a72ce FIREBASE_CLIENT_EMAIL=secretref:firebase-email FIREBASE_PRIVATE_KEY=secretref:firebase-key RESERVATION_TIME_ZONE=America/La_Paz SALES_CURRENCY=BOB
 ```
 
 - `--min-replicas 1`: los procesos de vencimiento de reservas y checkouts corren dentro de la API. Además, una sola réplica mantiene coherente el límite de solicitudes de IA, que se guarda en memoria.
@@ -113,3 +113,9 @@ az containerapp update -g $RG -n fashionstore-api --image "$ACR.azurecr.io/fashi
 # Al terminar la presentacion:
 az group delete -n $RG --yes
 ```
+
+
+## Notificaciones push (Firebase)
+
+- **API:** agregar los secretos `firebase-email` y `firebase-key` (valores `client_email` y `private_key` del JSON de la cuenta de servicio) y las variables `FIREBASE_*` (ver [notificaciones](../backend/docs/notificaciones.md)). La migración `push_tokens` se aplica sola con `RUN_MIGRATIONS=true`.
+- **Web:** construir la imagen con `--build-arg VITE_FIREBASE_API_KEY=... --build-arg VITE_FIREBASE_VAPID_KEY=...` (y el resto de `VITE_FIREBASE_*`), o construir con `frontend/.env` completo.
